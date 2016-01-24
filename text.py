@@ -292,6 +292,9 @@ class Page(object):
         """
         Calculates minimum Y for group
         """
+        if len(group) == 0:
+            return 0
+
         height = self.__height
         width = self.__width * 0.3
 
