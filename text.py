@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from itertools import groupby
 import textwrap
@@ -166,6 +167,7 @@ class Page(object):
         self.__bgimage = None
         self.__text_draw = None
         self.__filename = None
+        self.__bbox = {}
 
         self.__styles = {
             Style.normal: StyleInfo(10, 12, 'regular'),
@@ -186,17 +188,24 @@ class Page(object):
         """
         self.__filename = imagefile
         self.__texts = texts
+        self.__bbox.clear()
 
         self.__draw_image()
+
+        return self.__bbox
 
     def __draw_image(self):
         self.__image = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
         self.__bgimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+        self.__highimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+
         self.__text_draw = ImageDraw2(self.__image, mode="RGBA")
-        self.__bgdraw = ImageDraw2(self.__bgimage, mode="RGBA")
+        self.__bgdraw = ImageDraw(self.__bgimage, mode="RGBA")
+        self.__high_draw = ImageDraw(self.__highimage, mode="RGBA")
 
         callouts = []
         boxed_texts = []
+
         for t in self.__texts:
             if t.points:
                 callouts.append(t)
@@ -214,13 +223,20 @@ class Page(object):
             else:
                 self.__draw_side_group(key, group)
 
+        self._draw_bbox()
+
         # width = self.__width / 2
         # height = self.__height
         # xy = [width - 1, 0, width - 1, height]
         # self.__draw.line(xy, fill=(0, 0, 0), width=2)
 
         result = Image.alpha_composite(self.__bgimage, self.__image)
-        result.save(self.__filename, format='png')
+        result.save(self.__filename)
+
+        if len(self.__bbox):
+            highl_filename = os.path.splitext(self.__filename)[0] + "_hi.png"
+            result = Image.alpha_composite(result, self.__highimage)
+            result.save(highl_filename)
 
     def __draw_side_group(self, key, group):
         if len(group) == 0:
@@ -257,7 +273,11 @@ class Page(object):
             spacing = line_height - symbol_size
 
             split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
-            bbox = self.__text_draw.multiline_text((x, y), split.text, fill=t.fgcolor, font=font, align=align)
+
+            self.__text_draw.set_keywords(t.keywords)
+            bbox = self.__text_draw.multiline_text((x, y), split.text,
+                                                   fill=t.fgcolor, font=font, align=align, outline=t.fgcolor)
+            self.__update_bbox_dict(self.__text_draw.bbox)
 
             x_min = min(x_min, bbox[0])
             x_max = max(x_max, bbox[2])
@@ -308,11 +328,9 @@ class Page(object):
             symbol_size = get_symbol_size(font)
             spacing = style.line_height - symbol_size[1]
 
-            text = t.value
-            result = self.__text_draw.split_text_to_multiline(text, font, self.__width, spacing)
+            splitted = self.__text_draw.split_text_to_multiline(t.value, font, self.__width, spacing)
 
-            y -= result.size[1]
-            y -= symbol_size[1]
+            y -= splitted.size[1] + symbol_size[1]
 
         y_min = y
 
@@ -321,18 +339,27 @@ class Page(object):
             font = ImageFont.truetype(style.font_face, size=style.font_size)
             symbol_size = get_symbol_size(font)
             spacing = style.line_height - symbol_size[1]
-            text = t.value
 
-            result = self.__text_draw.split_text_to_multiline(text, font, self.__width, spacing)
+            splitted = self.__text_draw.split_text_to_multiline(t.value, font, self.__width, spacing)
 
-            self.__text_draw.multiline_text((symbol_size[0] * 2, y), text, fill=t.fgcolor, font=font)
+            self.__text_draw.set_keywords(t.keywords)
+            self.__text_draw.multiline_text((symbol_size[0] * 2, y), splitted.text,
+                                            fill=t.fgcolor, font=font, outline=t.fgcolor)
+            self.__update_bbox_dict(self.__text_draw.bbox)
 
-            y += result.size[1]
-            y += symbol_size[1]
+            y += splitted.size[1] + symbol_size[1]
 
         bg = group[0].bgcolor
         if bg is not None:
             self.__bgdraw.rectangle([0, y_min, self.__width, self.__height], fill=bg)
+
+    def __update_bbox_dict(self, bbox_dict):
+        for kw, boxes in bbox_dict.items():
+            arr = self.__bbox.get(kw, [])
+            self.__bbox[kw] = arr
+
+            for box in boxes:
+                arr.append(box)
 
     def set_font_style(self, style, font_size, line_height, font_weight):
         """
@@ -350,6 +377,11 @@ class Page(object):
         smoothed = smooth_points(t.points, 0.5)
         self.__bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
 
+    def _draw_bbox(self):
+        for key, bbox_arr in self.__bbox.items():
+            for box in bbox_arr:
+                self.__high_draw.rectangle(box.box, outline=box.outline)
+
 
 class SplitResult(object):
     def __init__(self, text, size):
@@ -358,6 +390,15 @@ class SplitResult(object):
 
     def __str__(self):
         return str.format("Size={0} Text={1}", self.size, self.text)
+
+
+class BoundingBox(object):
+    def __init__(self, box, outline):
+        self.box = box
+        self.outline = outline
+
+    def __str__(self):
+        return str.format("{0}", self.box)
 
 
 class StyleInfo(object):
@@ -371,8 +412,37 @@ class StyleInfo(object):
         return str.format("FS={0} LH={1} FW={2}", self.font_size, self.line_height, self.font_weight)
 
 
+def get_word(line):
+    """
+    :type line: str
+    """
+    letters = []
+
+    for b in line:
+        if str.isspace(b):
+            break
+        letters.append(b)
+
+    return ''.join(letters)
+
+
 class ImageDraw2(ImageDraw):
-    def multiline_text(self, xy, text, fill=None, font=None, anchor=None,
+    def __init__(self, im, mode=None):
+        super(ImageDraw2, self).__init__(im, mode)
+        self.__keywords = []
+        self.__bbox = {}
+
+    def set_keywords(self, keywords):
+        """
+        :type keywords: list[str]
+        """
+        self.__keywords = keywords
+
+    @property
+    def bbox(self):
+        return self.__bbox
+
+    def multiline_text(self, xy, text, fill=None, font=None, anchor=None, outline=None,
                        spacing=4, align="left"):
         widths = []
         max_width = 0
@@ -406,6 +476,27 @@ class ImageDraw2(ImageDraw):
             else:
                 assert False, 'align must be "left", "center" or "right"'
             self.text((left, top), line, fill, font, anchor)
+
+            for kw in self.__keywords:
+                if kw in line:
+                    index = 0
+                    while index != -1:
+                        index = line.find(kw, index)
+                        if index != -1:
+                            skip_area = self.textsize(line[:index], font)
+                            bbox = self.textsize(get_word(line[index:]), font)
+
+                            text_start_x = left + skip_area[0] - 1
+                            text_end_x = text_start_x + bbox[0] + 1
+                            bbox = [text_start_x, top, text_end_x, top + line_spacing]
+                            # self.rectangle(bbox, outline=outline)
+
+                            arr = self.__bbox.get(kw, [])
+                            arr.append(BoundingBox(bbox, outline))
+                            self.__bbox[kw] = arr
+
+                            index += 1
+
             top += line_spacing
             left = xy[0]
 
@@ -461,43 +552,43 @@ def test():
     test_page.generateTextImage([t1, t2, t3, t4, t5], '1.png')
 
     # text = "small text"
-    t1 = Text(0, text, [], Type.default, style,
+    t1 = Text(0, text, ['brown'], Type.default, style,
               XLocation.left, YLocation.top,
               None, fgcolor=(255, 0, 0), bgcolor=bgcolor)
-    t2 = Text(0, text, [], Type.default, style,
+    t2 = Text(0, text, ['jumps'], Type.default, style,
               XLocation.left, YLocation.top,
               None, fgcolor=(255, 0, 0), bgcolor=bgcolor)
 
-    t3 = Text(1, text, [], Type.east, style,
+    t3 = Text(1, text, ['brown'], Type.east, style,
               XLocation.left, YLocation.top,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t4 = Text(2, text, [], Type.east, style,
+    t4 = Text(2, text, ['brown'], Type.east, style,
               XLocation.left, YLocation.top,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t5 = Text(3, text, [], Type.east, style,
+    t5 = Text(3, text, ['brown'], Type.east, style,
               XLocation.right, YLocation.bottom,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t6 = Text(4, text, [], Type.east, style,
+    t6 = Text(4, text, ['brown'], Type.east, style,
               XLocation.right, YLocation.bottom,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    t5 = Text(3, text, [], Type.east, style,
+    t5 = Text(3, text, ['brown'], Type.east, style,
               XLocation.right, YLocation.bottom,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t6 = Text(4, text, [], Type.east, style,
+    t6 = Text(4, text, ['brown'], Type.east, style,
               XLocation.right, YLocation.bottom,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    t7 = Text(3, text, [], Type.east, style,
+    t7 = Text(3, text, ['brown'], Type.east, style,
               XLocation.right, YLocation.center,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t8 = Text(4, text, [], Type.east, style,
+    t8 = Text(4, text, ['brown'], Type.east, style,
               XLocation.right, YLocation.center,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
     test_page.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8], '2.png')
 
-    t3 = Text(1, text, [], Type.west, style,
+    t3 = Text(1, text, ['The', 'fox'], Type.west, style,
               XLocation.left, YLocation.top,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
     t4 = Text(2, text, [], Type.west, style,
