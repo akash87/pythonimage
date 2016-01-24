@@ -639,12 +639,13 @@ def test():
 
     test_page.generateTextImage([t1, t2, t3, t4, t5], '4.png')
 
+    test_page = Page(0, 60, 60)
     coords = [(10, 30), (20, 20),
               (30, 10), (50, 10),
               (50, 30), (30, 30),
               (10, 30)]
 
-    t1 = Text(3, text, [], points=coords, bgcolor='red')
+    t1 = Text(3, text, [], points=coords, bgcolor=bgcolor)
     test_page.generateTextImage([t1], '5.png')
 
 
