@@ -526,10 +526,10 @@ def test():
 
     test_page.generateTextImage([t3, t4, t5, t6, t7, t8, t9, t1], '3.png')
 
-    t1 = Text(3, text, [], Type.west, style,
+    t1 = Text(3, text, [], Type.west, Style.h2,
               XLocation.center, YLocation.center,
               None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
-    t2 = Text(4, text, [], Type.west, style,
+    t2 = Text(4, text, [], Type.west, Style.h3,
               XLocation.center, YLocation.center,
               None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
 
