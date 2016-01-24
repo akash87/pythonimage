@@ -1,7 +1,7 @@
 from enum import Enum
 from itertools import groupby
 import textwrap
-from PIL import ImageFont, Image, ImageDraw
+from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw
 
 
@@ -30,12 +30,16 @@ class YLocation(Enum):
     bottom = 'bottom'
 
 
+def get_symbol_size(font):
+    return font.getsize('A')
+
+
 class Text(object):
     """Text representation"""
 
     # noinspection PyShadowingBuiltins
     def __init__(self, index, value, keywords, type, style, xloc=None, yloc=None, points=None,
-                 fgColor=None, bgColor=None, bgOpacity=1.0):
+                 fgcolor=None, bgcolor=None, bgopacity=1.0):
         """
         :type index: int
         :type value: str
@@ -56,21 +60,21 @@ class Text(object):
         self.__yloc = yloc
         self.__boWidth = 2
         self.__boColor = (255, 255, 255)
-        self.__fgColor = fgColor or (255, 255, 255)
-        self.__bgColor = bgColor or (0, 0, 0)
-        self.__bgOpacity = bgOpacity
+        self.__fgcolor = fgcolor or (255, 255, 255)
+        self.__bgcolor = bgcolor or (0, 0, 0)
+        self.__bgOpacity = bgopacity
         self.__points = points
 
     @property
-    def fgColor(self):
-        return self.__fgColor
+    def fgcolor(self):
+        return self.__fgcolor
 
     @property
-    def bgColor(self):
-        return self.__bgColor
+    def bgcolor(self):
+        return self.__bgcolor
 
     @property
-    def bgOpacity(self):
+    def bgopacity(self):
         return self.__bgOpacity
 
     @property
@@ -105,11 +109,11 @@ class Text(object):
         return self.__yloc
 
     @property
-    def boWidth(self):
+    def bowidth(self):
         return self.__boWidth
 
-    @boWidth.setter
-    def boWidth(self, width=2):
+    @bowidth.setter
+    def bowidth(self, width=2):
         """
         Set the outline width in pixels
 
@@ -119,11 +123,11 @@ class Text(object):
         self.__boWidth = width
 
     @property
-    def boColor(self):
+    def bocolor(self):
         return self.__boColor
 
-    @boColor.setter
-    def boColor(self, color=None):
+    @bocolor.setter
+    def bocolor(self, color=None):
         if not isinstance(color, tuple):
             raise Exception("color should be tuple")
 
@@ -148,6 +152,7 @@ class Page(object):
 
         self.__texts = []
         self.__image = None
+        self.__bgimage = None
         self.__draw = None
         self.__filename = None
 
@@ -158,42 +163,48 @@ class Page(object):
             Style.h3: StyleInfo(20, 22, 'regular'),
         }
 
-    def generateTextImage(self, texts, imageFile):
+    # noinspection PyPep8Naming
+    def generateTextImage(self, texts, imagefile):
         """
 
         :param texts:
-        :param imageFile:
+        :param imagefile:
         :type texts: list[Text]
-        :type imageFile: basestring
+        :type imagefile: str
         :return:
         """
-        self.__filename = imageFile
+        self.__filename = imagefile
         self.__texts = texts
 
-        self.__drawImage()
+        self.__draw_image()
 
-    def __drawImage(self):
+    def __draw_image(self):
         self.__image = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
-        self.__draw = ImageDraw2(self.__image)
-
-        # font = ImageFont.truetype("arial.ttf")
-        # self.__draw.text((10, 10), "hello", font=font)
-        #
-        # font = ImageFont.truetype("arial.ttf")
-        # self.__draw.text((10, 25), "world", fill=(0, 0, 0), font=font)
-        #
+        self.__bgimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+        self.__draw = ImageDraw2(self.__image, mode="RGBA")
+        self.__bgdraw = ImageDraw2(self.__bgimage, mode="RGBA")
 
         for key, group in groupby(self.__texts, lambda x: [x.type, x.xloc, x.yloc]):
             group = list(sorted(group, key=lambda x: x.index))
 
             if key[0] == Type.default:
-                self.__drawAtTheBottom(group)
+                self.__draw_bottom(group)
             else:
-                self.__drawGroup(key, group)
+                self.__draw_side_group(key, group)
 
-        self.__image.save(self.__filename, format='png')
+        width = self.__width / 2
+        height = self.__height
+        xy = [width - 1, 0, width - 1, height]
 
-    def __drawGroup(self, key, group):
+        self.__draw.line(xy, fill=(0, 0, 0), width=2)
+
+        # self.__bgimage.paste(self.__image, (0, 0), self.__image)
+        # self.__image.save(self.__filename, format='png')
+
+        result = Image.alpha_composite(self.__bgimage, self.__image)
+        result.save(self.__filename, format='png')
+
+    def __draw_side_group(self, key, group):
         if len(group) == 0:
             return
 
@@ -202,7 +213,6 @@ class Page(object):
         yloc = key[2]
 
         width = self.__width
-        height = self.__height
 
         if xloc == XLocation.left:
             x = width * 0.05 if type == Type.west else width * 0.55
@@ -211,64 +221,101 @@ class Page(object):
             x = width / 4 if type == Type.west else width * 3 / 4
             align = "center"
         else:
-            # NO!
-            x = width * 0.4 if type == Type.west else width * 0.9
+            x = width * 0.45 if type == Type.west else width * 0.95
             align = "right"
 
-        if yloc == YLocation.top:
-            y = height * 0.05
-        elif yloc == YLocation.center:
-            y = height * 0.5
-        else:
-            # NO!
-            y = height * 0.9
-            y_end = height * 0.9
+        box_width = width * 0.3
+        y = self.__calc_y_top(yloc, group)
+        x_min = x
+        x_max = 0
+        y_min = y
 
         for t in group:
             style = self.__styles[t.style]
-            font = ImageFont.truetype("arial.ttf", size=style.fontSize)
-            top = self.__draw.multiline_text((x, y), t.value, fill=t.fgColor, font=font, align=align)
-            y += top
+            line_height = style.line_height
+            font = ImageFont.truetype(style.font_face, size=style.font_size)
+            symbol_size = self.__draw.textsize('A', font=font)[1]
+            spacing = line_height - symbol_size
 
-            # self.__draw.rectangle()
+            split = self.__draw.split_text_to_multiline(t.value, font, box_width, spacing)
+            bbox = self.__draw.multiline_text((x, y), split.text, fill=t.fgcolor, font=font, align=align)
 
-    def __drawAtTheBottom(self, group):
+            x_min = min(x_min, bbox[0])
+            x_max = max(x_max, bbox[2])
+
+            y += split.size[1] + spacing
+
+        self.__bgdraw.rectangle([x_min, y_min, x_max, y], fill=group[0].bgcolor)
+
+    def __calc_y_top(self, yloc, group):
+        height = self.__height
+        width = self.__width * 0.3
+
+        if yloc == YLocation.top:
+            return height * 0.05
+
+        if yloc == YLocation.center:
+            y = height / 2
+        else:
+            y = height * 0.95
+
+        for t in group:
+            style = self.__styles[t.style]
+            line_height = style.line_height
+            font = ImageFont.truetype(style.font_face, size=style.font_size)
+            symbol_size = self.__draw.textsize('A', font=font)[1]
+            spacing = line_height - symbol_size
+            split = self.__draw.split_text_to_multiline(t.value, font, width, spacing)
+            size = split.size
+
+            if yloc == YLocation.center:
+                y -= size[1] / 2
+            else:
+                y -= size[1]
+
+        return y
+
+    def __draw_bottom(self, group):
         y = self.__height
 
         for t in group:
             style = self.__styles[t.style]
-            font = ImageFont.truetype("arial.ttf", size=style.fontSize)
-            symbol_size = font.getsize('A')
-            spacing = style.lineHeight - symbol_size[1]
-            font = ImageFont.truetype("arial.ttf", size=style.fontSize)
+            font = ImageFont.truetype(style.font_face, size=style.font_size)
+            symbol_size = get_symbol_size(font)
+            spacing = style.line_height - symbol_size[1]
+
             text = t.value
             result = self.__draw.split_text_to_multiline(text, font, self.__width, spacing)
 
             y -= result.size[1]
             y -= symbol_size[1]
 
+        y_min = y
+
         for t in group:
             style = self.__styles[t.style]
-            font = ImageFont.truetype("arial.ttf", size=style.fontSize)
-            symbol_size = font.getsize('A')
-            spacing = style.lineHeight - symbol_size[1]
+            font = ImageFont.truetype(style.font_face, size=style.font_size)
+            symbol_size = get_symbol_size(font)
+            spacing = style.line_height - symbol_size[1]
             text = t.value
 
             result = self.__draw.split_text_to_multiline(text, font, self.__width, spacing)
 
-            self.__draw.multiline_text((symbol_size[0] * 2, y), text, fill=t.fgColor, font=font)
+            self.__draw.multiline_text((symbol_size[0] * 2, y), text, fill=t.fgcolor, font=font)
             y += result.size[1]
             y += symbol_size[1]
 
-    def set_font_style(self, style, fontSize, lineHeight, fontWeight):
+        self.__bgdraw.rectangle([0, y_min, self.__width, self.__height], fill=group[0].bgcolor)
+
+    def set_font_style(self, style, font_size, line_height, font_weight):
         """
 
         :type style: Style
-        :type fontSize: int
-        :type lineHeight: int
-        :type fontWeight: int
+        :type font_size: int
+        :type line_height: int
+        :type font_weight: int
         """
-        self.__styles[style] = StyleInfo(fontSize, lineHeight, fontWeight)
+        self.__styles[style] = StyleInfo(font_size, line_height, font_weight)
 
 
 class SplitResult(object):
@@ -276,12 +323,19 @@ class SplitResult(object):
         self.text = text
         self.size = size
 
+    def __str__(self):
+        return str.format("Size={0} Text={1}", self.size, self.text)
+
 
 class StyleInfo(object):
-    def __init__(self, fontSize, lineHeight, fontWeight):
-        self.fontSize = fontSize
-        self.lineHeight = lineHeight
-        self.fontWeight = fontWeight
+    def __init__(self, font_size, line_height, font_weight):
+        self.font_size = font_size
+        self.line_height = line_height
+        self.font_weight = font_weight
+        self.font_face = "arial.ttf"
+
+    def __str__(self):
+        return str.format("FS={0} LH={1} FW={2}", self.font_size, self.line_height, self.font_weight)
 
 
 class ImageDraw2(ImageDraw):
@@ -291,11 +345,24 @@ class ImageDraw2(ImageDraw):
         max_width = 0
         lines = self._multiline_split(text)
         line_spacing = self.textsize('A', font=font)[1] + spacing
+
         for line in lines:
             line_width, line_height = self.textsize(line, font)
             widths.append(line_width)
             max_width = max(max_width, line_width)
+
+        if align == "center":
+            x = xy[0] - max_width / 2.0
+            y = xy[1]
+            xy = [x, y]
+        elif align == "right":
+            x = xy[0] - max_width
+            y = xy[1]
+            xy = [x, y]
+
         left, top = xy
+        top_initial = top
+
         for idx, line in enumerate(lines):
             if align == "left":
                 pass  # left = x
@@ -308,7 +375,8 @@ class ImageDraw2(ImageDraw):
             self.text((left, top), line, fill, font, anchor)
             top += line_spacing
             left = xy[0]
-        return top
+
+        return [left, top_initial, left + max_width, top]
 
     def split_text_to_multiline(self, text, font, width, spacing):
         """
@@ -318,82 +386,128 @@ class ImageDraw2(ImageDraw):
         :type spacing: int
         """
         size = self.textsize(text, font)
-        if size[1] < width:
+        if size[0] < width:
             return SplitResult(text, size)
 
         text.rsplit()
 
-        symbolSize = self.textsize('A', font=font)
-        symbol_width = symbolSize[0]
+        symbol_size = self.textsize('A', font=font)
+        symbol_width = symbol_size[0]
         max_symbols_in_line = width / symbol_width
 
         text = textwrap.fill(text, width=max_symbols_in_line)
         size = self.multiline_textsize(text, font, spacing)
+
         return SplitResult(text, size)
 
 
 if __name__ == '__main__':
-    p = Page(0, 400, 200)
-    style = Style.normal
+    p = Page(0, 400, 400)
+    style_ = Style.normal
+    text_ = "The quick brown fox jumps over the lazy dog"
+    bgcolor = (253, 120, 120, 70)
 
-    t1 = Text(0, '123', [], Type.default, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t1 = Text(0, text_, [], Type.default, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    t2 = Text(1, '000', [], Type.east, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t3 = Text(2, '000', [], Type.east, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t2 = Text(1, text_, [], Type.east, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(255, 0, 0), bgcolor=bgcolor)
+    t3 = Text(2, text_, [], Type.east, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(255, 0, 0), bgcolor=bgcolor)
 
-    t4 = Text(3, '456', [], Type.west, style, XLocation.right, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t5 = Text(4, '456', [], Type.west, style, XLocation.right, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t4 = Text(3, text_, [], Type.west, style_,
+              XLocation.right, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t5 = Text(4, text_, [], Type.west, style_,
+              XLocation.right, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    p.generateTextImage([t1, t2, t3, t4], 'D:\\1.png')
+    p.generateTextImage([t1, t2, t3, t4, t5], '1.png')
 
-    t1 = Text(0, '123', [], Type.default, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t2 = Text(0, '123', [], Type.default, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    # text_ = "small text"
+    t1 = Text(0, text_, [], Type.default, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(255, 0, 0), bgcolor=bgcolor)
+    t2 = Text(0, text_, [], Type.default, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(255, 0, 0), bgcolor=bgcolor)
 
-    t3 = Text(1, 'LT1', [], Type.east, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t4 = Text(2, 'LT2', [], Type.east, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t5 = Text(3, 'RB1', [], Type.east, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t6 = Text(4, 'RB2', [], Type.east, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t3 = Text(1, text_, [], Type.east, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t4 = Text(2, text_, [], Type.east, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t5 = Text(3, text_, [], Type.east, style_,
+              XLocation.right, YLocation.bottom,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t6 = Text(4, text_, [], Type.east, style_,
+              XLocation.right, YLocation.bottom,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    t5 = Text(3, 'RB1', [], Type.east, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t6 = Text(4, 'RB2', [], Type.east, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t5 = Text(3, text_, [], Type.east, style_,
+              XLocation.right, YLocation.bottom,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t6 = Text(4, text_, [], Type.east, style_,
+              XLocation.right, YLocation.bottom,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    t7 = Text(3, 'CR1', [], Type.east, style, XLocation.right, YLocation.center, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t8 = Text(4, 'CR2', [], Type.east, style, XLocation.right, YLocation.center, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t7 = Text(3, text_, [], Type.east, style_,
+              XLocation.right, YLocation.center,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t8 = Text(4, text_, [], Type.east, style_,
+              XLocation.right, YLocation.center,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    p.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8], 'D:\\2.png')
+    p.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8], '2.png')
 
-    t3 = Text(1, 'LT1', [], Type.west, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t4 = Text(2, 'LT2', [], Type.west, style, XLocation.left, YLocation.top, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t5 = Text(3, 'RB1', [], Type.west, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t6 = Text(4, 'RB2', [], Type.west, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t3 = Text(1, text_, [], Type.west, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t4 = Text(2, text_, [], Type.west, style_,
+              XLocation.left, YLocation.top,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t5 = Text(3, text_, [], Type.west, style_,
+              XLocation.left, YLocation.bottom,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
+    t6 = Text(4, text_, [], Type.west, style_,
+              XLocation.left, YLocation.bottom,
+              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
-    t5 = Text(3, 'RB1', [], Type.west, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t6 = Text(4, 'RB2', [], Type.west, style, XLocation.right, YLocation.bottom, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t7 = Text(3, text_, [], Type.west, style_,
+              XLocation.right, YLocation.bottom,
+              None, fgcolor=(0, 0, 255), bgcolor=bgcolor)
+    t8 = Text(4, text_, [], Type.west, style_,
+              XLocation.right, YLocation.bottom,
+              None, fgcolor=(0, 0, 255), bgcolor=bgcolor)
 
-    t7 = Text(3, 'CR1', [], Type.west, style, XLocation.right, YLocation.center, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
-    t8 = Text(4, 'CR2', [], Type.west, style, XLocation.right, YLocation.center, None, fgColor=(0, 0, 0),
-              bgColor=(255, 0, 0))
+    t9 = Text(3, text_, [], Type.west, style_,
+              XLocation.right, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
+    t1 = Text(4, text_, [], Type.west, style_,
+              XLocation.right, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
 
-    p.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8], 'D:\\3.png')
+    p.generateTextImage([t3, t4, t5, t6, t7, t8, t9, t1], '3.png')
+
+    t1 = Text(3, text_, [], Type.west, style_,
+              XLocation.center, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
+    t2 = Text(4, text_, [], Type.west, style_,
+              XLocation.center, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
+
+    t3 = Text(3, text_, [], Type.east, style_,
+              XLocation.center, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
+    t4 = Text(4, text_, [], Type.east, style_,
+              XLocation.center, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
+    t5 = Text(5, text_, [], Type.east, style_,
+              XLocation.center, YLocation.center,
+              None, fgcolor=(0, 255, 0), bgcolor=bgcolor)
+
+    p.generateTextImage([t1, t2, t3, t4, t5], '4.png')
