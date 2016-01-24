@@ -4,6 +4,8 @@ from itertools import groupby
 import textwrap
 from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw
+import math
+import sys
 from bezier import smooth_points
 
 
@@ -34,6 +36,37 @@ class YLocation(Enum):
 
 def get_symbol_size(font):
     return font.getsize('A')
+
+
+def centroid(points):
+    center = [0, 0]
+    points_count = len(points)
+
+    if points_count == 0:
+        return center
+
+    if points_count == 1:
+        return points[0]
+
+    for point in points:
+        center[0] += point[0]
+        center[1] += point[1]
+
+    center[0] /= points_count
+    center[1] /= points_count
+
+    return center
+
+
+def get_width(points):
+    min_x = sys.maxsize
+    max_x = 0
+
+    for point in points:
+        min_x = min(min_x, point[0])
+        max_x = max(max_x, point[1])
+
+    return int(math.floor(math.fabs(max_x - min_x) * 0.5))
 
 
 class Text(object):
@@ -165,7 +198,6 @@ class Page(object):
         self.__texts = []
         self.__image = None
         self.__bgimage = None
-        self.__text_draw = None
         self.__filename = None
         self.__bbox = {}
 
@@ -259,7 +291,7 @@ class Page(object):
             x = width * 0.45 if type == Type.west else width * 0.95
             align = "right"
 
-        box_width = width * 0.3
+        box_width = int(width * 0.3)
         y = self.__calc_y_top(yloc, group)
         x_min = x
         x_max = 0
@@ -369,7 +401,7 @@ class Page(object):
         :type style: Style
         :type font_size: int
         :type line_height: int
-        :type font_weight: int
+        :type font_weight: str
         """
         self.__styles[style] = StyleInfo(font_size, line_height, font_weight)
 
@@ -379,6 +411,22 @@ class Page(object):
         """
         smoothed = smooth_points(t.points, 0.5)
         self.__bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
+
+        center = centroid(t.points)
+        box_width = get_width(t.points)
+
+        style = self.__styles[t.style]
+        line_height = style.line_height
+        font = ImageFont.truetype(style.font_face, size=style.font_size)
+        symbol_size = self.__text_draw.textsize('A', font=font)[1]
+        spacing = line_height - symbol_size
+
+        split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
+
+        self.__text_draw.set_keywords(t.keywords)
+        self.__text_draw.multiline_text(center, split.text, font=font,
+                                        fill=t.fgcolor, align="center", outline=t.fgcolor)
+        self.__update_bbox_dict(self.__text_draw.bbox)
 
     def _draw_bbox(self):
         for key, bbox_arr in self.__bbox.items():
@@ -516,11 +564,9 @@ class ImageDraw2(ImageDraw):
         if size[0] < width:
             return SplitResult(text, size)
 
-        text.rsplit()
-
         symbol_size = self.textsize('A', font=font)
         symbol_width = symbol_size[0]
-        max_symbols_in_line = width / symbol_width
+        max_symbols_in_line = int(width / symbol_width)
 
         text = textwrap.fill(text, width=max_symbols_in_line)
         size = self.multiline_textsize(text, font, spacing)
@@ -639,13 +685,16 @@ def test():
 
     test_page.generateTextImage([t1, t2, t3, t4, t5], '4.png')
 
-    test_page = Page(0, 60, 60)
-    coords = [(10, 30), (20, 20),
-              (30, 10), (50, 10),
-              (50, 30), (30, 30),
-              (10, 30)]
+    test_page = Page(0, 600, 600)
+    coords = [(100, 300), (200, 250),
+              (300, 100), (500, 100),
+              (500, 300), (300, 300),
+              (100, 300)]
 
-    t1 = Text(3, text, [], points=coords, bgcolor=bgcolor)
+    text = '123 456'
+    t1 = Text(3, text, ['123', '456'], points=coords, bgcolor=bgcolor, fgcolor='black', style=Style.h1)
+
+    # test_page.set_font_style(Style.normal, 6, 8, 'normal')
     test_page.generateTextImage([t1], '5.png')
 
 
