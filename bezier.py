@@ -8,7 +8,7 @@ def point_distance(a, b):
     return math.sqrt(pow(a[0] - b[0], 2) + pow(a[1] - b[1], 2))
 
 
-NUM_STEPS = 20
+__NUM_STEPS = 20
 
 
 def cubic_bezier_fn(control_pts, t):
@@ -83,7 +83,7 @@ def get_control_points(coords, n, alpha):
     return cpoints
 
 
-def cubic_bezier_2(start, end, ctrl1, ctrl2, nv):
+def cubic_bezier(start, end, ctrl1, ctrl2, nv):
     result = [start]
 
     for i in range(nv - 1):
@@ -105,7 +105,23 @@ def cubic_bezier_2(start, end, ctrl1, ctrl2, nv):
     return result
 
 
-if __name__ == '__main__':
+def smooth_points(coords, alpha):
+    vertices_count = len(coords)
+    cpoints = get_control_points(coords, vertices_count, alpha)
+    points = []
+
+    for i in range(vertices_count):
+        i_next = (i + 1) % vertices_count
+
+        segment = cubic_bezier(coords[i], coords[i_next],
+                               cpoints[i][1], cpoints[i_next][0],
+                               10)
+        points.extend(segment)
+
+    return points
+
+
+def main():
     im = Image.new('RGBA', (100, 100), (0, 0, 0, 0))
     draw = ImageDraw.Draw(im)
 
@@ -123,10 +139,14 @@ if __name__ == '__main__':
     for i in range(vertices_count):
         i_next = (i + 1) % vertices_count
 
-        segment = cubic_bezier_2(coords[i], coords[i_next],
-                                 cpoints[i][1], cpoints[i_next][0],
-                                 10)
+        segment = cubic_bezier(coords[i], coords[i_next],
+                               cpoints[i][1], cpoints[i_next][0],
+                               10)
         points.extend(segment)
 
     draw.polygon(points, fill='red', outline='black')
     im.save('out2.png')
+
+
+if __name__ == '__main__':
+    main()
