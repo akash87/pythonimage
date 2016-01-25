@@ -8,7 +8,7 @@ from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw
 import math
 import sys
-from bezier import smooth_points, point_distance
+from bezier import smooth_points, point_distance, convert_to_degree, get_angle
 
 
 class Type(Enum):
@@ -70,34 +70,6 @@ def centroid(points):
     center[1] /= points_count
 
     return center
-
-
-def get_angle(p1, p2, p3):
-    """
-    Calculates the angle between three points
-    https://en.wikipedia.org/wiki/Law_of_cosines#Applications
-
-    :param p1: center point
-    :type p1: tuple
-    :type p2: tuple
-    :type p3: tuple
-
-    :rtype: float
-    """
-    f = point_distance
-    p12 = f(p1, p2)
-    p13 = f(p1, p3)
-    p23 = f(p2, p3)
-
-    if p12 == 0 or p13 == 0:
-        return math.acos(0)
-
-    result = (p12 ** 2 + p13 ** 2 - p23 ** 2) / (2 * p12 * p13)
-    return math.acos(result)
-
-
-def convert_to_degree(radian):
-    return radian * 180 / math.pi
 
 
 def get_callout_width(points):
@@ -248,6 +220,8 @@ class Page(object):
         self.__bgimage = None
         self.__filename = ""
         self.__bbox = {}
+        self.__callout_pointer_angle = 45
+        self.__callout_smooth_factor = 0.5
 
         self.__styles = {
             Style.normal: StyleInfo(10, 12, 'regular'),
@@ -255,6 +229,13 @@ class Page(object):
             Style.h2: StyleInfo(24, 26, 'regular'),
             Style.h3: StyleInfo(20, 22, 'regular'),
         }
+
+    # noinspection PyPep8Naming
+    def setCalloutPointerAngle(self, angle):
+        """
+        :type angle: int
+        """
+        self.__callout_pointer_angle = angle
 
     # noinspection PyPep8Naming
     def generateTextImage(self, texts, imagefile):
@@ -481,26 +462,18 @@ class Page(object):
         :type t: Text
         """
 
-        points = list(t.points)
+        all_points = t.points
 
-        points_count = len(points)
-
-        straight_points = []
-        for i in range(points_count):
-            p2 = points[i]
-            p1 = points[(i + 1) % points_count]
-            p3 = points[(i + 2) % points_count]
-            angle = convert_to_degree(get_angle(p1, p2, p3))
-            if angle <= 45:
-                straight_points = [p1, p2, p3]
-                del points[(i + 1) % points_count]
-                break
-
-        smoothed = smooth_points(t.points, 0.5)
+        # Draw polygon
+        smoothed = smooth_points(all_points, self.__callout_smooth_factor, self.__callout_pointer_angle)
         self.__bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
 
-        center_x, center_y = centroid(points)
-        box_width = get_callout_width(points)
+        # remove callout angle from polygon to recognize callout center
+        points_no_callout_center = self.__get_points_without_callout_angle_center(all_points)
+        text_center_x, text_center_y = centroid(points_no_callout_center)
+        box_width = get_callout_width(points_no_callout_center)
+        text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
+        center = [text_center_x, text_center_y]
 
         style = self.__styles[t.style]
         line_height = style.line_height
@@ -508,15 +481,27 @@ class Page(object):
         symbol_size = self.__text_draw.textsize('A', font=font)[1]
         spacing = line_height - symbol_size
 
-        center_y = self.__calc_y_top_from_start_y([t], box_width, center_y, YLocation.center)
-        center = [center_x, center_y]
-
         split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
 
         self.__text_draw.set_keywords(t.keywords)
         self.__text_draw.multiline_text(center, split.text, font=font,
                                         fill=t.fgcolor, align="center", outline=t.fgcolor)
         self.__update_bbox_dict(self.__text_draw.bbox)
+
+    @staticmethod
+    def __get_points_without_callout_angle_center(all_points):
+        points_count = len(all_points)
+
+        points_no_callout_center = all_points[:]
+        for i in range(points_count):
+            p2 = all_points[i]
+            p1 = all_points[(i + 1) % points_count]
+            p3 = all_points[(i + 2) % points_count]
+            angle = convert_to_degree(get_angle(p1, p2, p3))
+            if angle <= 45:
+                del points_no_callout_center[(i + 1) % points_count]
+                break
+        return points_no_callout_center
 
     def _draw_bbox(self):
         """
