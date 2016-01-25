@@ -88,7 +88,12 @@ def get_angle(p1, p2, p3):
     p12 = f(p1, p2)
     p13 = f(p1, p3)
     p23 = f(p2, p3)
-    return math.acos((p12 ** 2 + p13 ** 2 - p23 ** 2) / (2 * p12 * p13))
+
+    if p12 == 0 or p13 == 0:
+        return math.acos(0)
+
+    result = (p12 ** 2 + p13 ** 2 - p23 ** 2) / (2 * p12 * p13)
+    return math.acos(result)
 
 
 def convert_to_degree(radian):
@@ -109,7 +114,7 @@ def get_callout_width(points):
         min_x = min(min_x, point[0])
         max_x = max(max_x, point[1])
 
-    return int(math.floor(math.fabs(max_x - min_x) * 0.5))
+    return int(math.floor(math.fabs(max_x - min_x) * 0.8))
 
 
 class Text(object):
@@ -390,6 +395,9 @@ class Page(object):
         else:
             y = height * 0.95
 
+        return self.__calc_y_top_from_start_y(group, width, y, yloc)
+
+    def __calc_y_top_from_start_y(self, group, width, y, yloc):
         for t in group:
             style = self.__styles[t.style]
             line_height = style.line_height
@@ -403,7 +411,6 @@ class Page(object):
                 y -= size[1] / 2
             else:
                 y -= size[1]
-
         return y
 
     def __draw_bottom(self, group):
@@ -474,17 +481,35 @@ class Page(object):
         :type t: Text
         """
 
+        points = list(t.points)
+
+        points_count = len(points)
+
+        straight_points = []
+        for i in range(points_count):
+            p2 = points[i]
+            p1 = points[(i + 1) % points_count]
+            p3 = points[(i + 2) % points_count]
+            angle = convert_to_degree(get_angle(p1, p2, p3))
+            if angle <= 45:
+                straight_points = [p1, p2, p3]
+                del points[(i + 1) % points_count]
+                break
+
         smoothed = smooth_points(t.points, 0.5)
         self.__bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
 
-        center = centroid(t.points)
-        box_width = get_callout_width(t.points)
+        center_x, center_y = centroid(points)
+        box_width = get_callout_width(points)
 
         style = self.__styles[t.style]
         line_height = style.line_height
         font = ImageFont.truetype(style.font_face, size=style.font_size)
         symbol_size = self.__text_draw.textsize('A', font=font)[1]
         spacing = line_height - symbol_size
+
+        center_y = self.__calc_y_top_from_start_y([t], box_width, center_y, YLocation.center)
+        center = [center_x, center_y]
 
         split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
 
@@ -762,8 +787,7 @@ def __test():
     test_page = Page(0, 600, 600)
     coords = [(100, 300), (200, 250),
               (300, 100), (500, 100),
-              (500, 300), (300, 300),
-              (100, 300)]
+              (500, 300), (300, 300)]
 
     text = '123 456'
     t1 = Text(3, text, ['123', '456'], points=coords, bgcolor=bgcolor, fgcolor='black', style=Style.h1)
