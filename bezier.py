@@ -1,46 +1,31 @@
 import math
+
 from PIL import Image, ImageDraw
-from itertools import cycle
-from numpy import arange
 
 
 def point_distance(a, b):
+    """
+    Calculates distance between two points
+
+    :rtype: float
+    """
     return math.sqrt(pow(a[0] - b[0], 2) + pow(a[1] - b[1], 2))
 
 
-__NUM_STEPS = 20
-
-
-def cubic_bezier_fn(control_pts, t):
+def get_control_points(coords, alpha):
     """
-    Numerically calculate an x,y point for the bezier curve at position t.
+    Returns list of control points that are created from coordinates.
 
-    Parameters: control_pts -- list of 4 (x,y) control points
-                t -- 'time' value should be between 0 and 1
+    Result list will be 2 * len(coords)
 
-    Return: (xpt, ypt) -- tuple of x,y data on the curve
+    :param coords: list of coordinates
+    :param alpha: smooth factor
+    :rtype : list[tuple(2)]
     """
-    check = ((0 <= t) and (t <= 1))
-    assert check
-
-    # define the actual cubic bezier equation here
-    def fn(c, t):
-        return c[0] * (1 - t) ** 3 + c[1] * 3 * t * (1 - t) ** 2 + c[2] * 3 * t ** 2 * (1 - t) + c[3] * t ** 3
-
-    xs = [x for x, y in control_pts]
-    ys = [y for x, y in control_pts]
-
-    # now calculate the x,y position from the bezier equation
-    xpt = fn(xs, t)
-    ypt = fn(ys, t)
-
-    return xpt, ypt
-
-
-def get_control_points(coords, n, alpha):
     assert 0 < alpha < 1
 
     cpoints = []
+    n = len(coords)
 
     v = [(0, 0), list(coords[n - 1]), list(coords[0])]
 
@@ -84,6 +69,16 @@ def get_control_points(coords, n, alpha):
 
 
 def cubic_bezier(start, end, ctrl1, ctrl2, nv):
+    """
+    Create bezier curve between start and end points
+
+    :param start: start anchor point
+    :param end: end anchor point
+    :param ctrl1: control point 1
+    :param ctrl2: control point 2
+    :param nv: number of points should be created between start and end
+    :return: list of smoothed points
+    """
     result = [start]
 
     for i in range(nv - 1):
@@ -106,8 +101,18 @@ def cubic_bezier(start, end, ctrl1, ctrl2, nv):
 
 
 def smooth_points(coords, alpha):
+    """
+    Converts a list of points to polygon based on bezier curves
+
+    http://www.elvenprogrammer.org/projects/bezier/reference/
+
+    :param coords: list of coordinates
+    :param alpha: smooth factor
+    :return: point list of smoothed polygon
+    :rtype : list
+    """
     vertices_count = len(coords)
-    cpoints = get_control_points(coords, vertices_count, alpha)
+    cpoints = get_control_points(coords, alpha)
     points = []
 
     for i in range(vertices_count):
@@ -121,7 +126,7 @@ def smooth_points(coords, alpha):
     return points
 
 
-def main():
+def __main():
     im = Image.new('RGBA', (100, 100), (0, 0, 0, 0))
     draw = ImageDraw.Draw(im)
 
@@ -132,7 +137,7 @@ def main():
 
     vertices_count = len(coords)
 
-    cpoints = get_control_points(coords, vertices_count, 0.5)
+    cpoints = get_control_points(coords, 0.5)
 
     points = []
 
@@ -149,4 +154,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    __main()
