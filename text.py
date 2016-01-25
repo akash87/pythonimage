@@ -8,7 +8,7 @@ from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw
 import math
 import sys
-from bezier import smooth_points
+from bezier import smooth_points, point_distance
 
 
 class Type(Enum):
@@ -37,10 +37,22 @@ class YLocation(Enum):
 
 
 def get_symbol_size(font):
+    """
+    Gets width and height for "A" symbol
+
+    :param font:
+    :return:
+    """
     return font.getsize('A')
 
 
 def centroid(points):
+    """
+    Calculates the center point of callout points
+
+    :param points:
+    :return:
+    """
     center = [0, 0]
     points_count = len(points)
 
@@ -60,7 +72,36 @@ def centroid(points):
     return center
 
 
-def get_width(points):
+def get_angle(p1, p2, p3):
+    """
+    Calculates the angle between three points
+    https://en.wikipedia.org/wiki/Law_of_cosines#Applications
+
+    :param p1: center point
+    :type p1: tuple
+    :type p2: tuple
+    :type p3: tuple
+
+    :rtype: float
+    """
+    f = point_distance
+    p12 = f(p1, p2)
+    p13 = f(p1, p3)
+    p23 = f(p2, p3)
+    return math.acos((p12 ** 2 + p13 ** 2 - p23 ** 2) / (2 * p12 * p13))
+
+
+def convert_to_degree(radian):
+    return radian * 180 / math.pi
+
+
+def get_callout_width(points):
+    """
+    Get the available width of callout to place text
+
+    :param points: callout points
+    :return:
+    """
     min_x = sys.maxsize
     max_x = 0
 
@@ -189,7 +230,7 @@ class Text(object):
 
 
 class Page(object):
-    """docstring for Page"""
+    """Page that splitted for two halves"""
 
     def __init__(self, idx, width, height):
         super(Page, self).__init__()
@@ -213,13 +254,13 @@ class Page(object):
     # noinspection PyPep8Naming
     def generateTextImage(self, texts, imagefile):
         """
+        Generates image for text items and saves to imagefile
 
-        :param texts:
-        :param imagefile:
         :type texts: list[Text]
         :type imagefile: str
         :return:
         """
+
         self.__filename = imagefile
         self.__texts = texts
         self.__bbox.clear()
@@ -229,6 +270,10 @@ class Page(object):
         return self.__bbox
 
     def __draw_image(self):
+        """
+        Draws the images (with and without keywords highlighted)
+        """
+
         self.__image = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
         self.__bgimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
         self.__highimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
@@ -273,6 +318,10 @@ class Page(object):
             result.save(highl_filename)
 
     def __draw_side_group(self, key, group):
+        """
+        Draws east and west sides of the page
+        """
+
         if len(group) == 0:
             return
 
@@ -326,6 +375,7 @@ class Page(object):
         """
         Calculates minimum Y for group
         """
+
         if len(group) == 0:
             return 0
 
@@ -357,6 +407,10 @@ class Page(object):
         return y
 
     def __draw_bottom(self, group):
+        """
+        Draws the text at the bottom of page (texts with Type.default)
+        """
+
         y = self.__height
 
         for t in group:
@@ -391,6 +445,9 @@ class Page(object):
             self.__bgdraw.rectangle([0, y_min, self.__width, self.__height], fill=bg)
 
     def __update_bbox_dict(self, bbox_dict):
+        """
+        Updates the internal bounding boxes dictionary
+        """
         for kw, boxes in bbox_dict.items():
             arr = self.__bbox.get(kw, [])
             self.__bbox[kw] = arr
@@ -400,22 +457,28 @@ class Page(object):
 
     def set_font_style(self, style, font_size, line_height, font_weight):
         """
+        Changes style for drawn texts
+
         :type style: Style
         :type font_size: int
         :type line_height: int
         :type font_weight: str
         """
+
         self.__styles[style] = StyleInfo(font_size, line_height, font_weight)
 
     def __draw_callout(self, t):
         """
+        Draws callout using Text.points
+
         :type t: Text
         """
+
         smoothed = smooth_points(t.points, 0.5)
         self.__bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
 
         center = centroid(t.points)
-        box_width = get_width(t.points)
+        box_width = get_callout_width(t.points)
 
         style = self.__styles[t.style]
         line_height = style.line_height
@@ -431,6 +494,10 @@ class Page(object):
         self.__update_bbox_dict(self.__text_draw.bbox)
 
     def _draw_bbox(self):
+        """
+        Draws bounding boxes to keywords highlighted image
+        """
+
         for key, bbox_arr in self.__bbox.items():
             for box in bbox_arr:
                 self.__high_draw.rectangle(box.box, outline=box.outline)
@@ -467,6 +534,8 @@ class StyleInfo(object):
 
 def get_word(line):
     """
+    Gets the next word from line
+
     :type line: str
     """
     letters = []
@@ -497,6 +566,10 @@ class ImageDraw2(ImageDraw):
 
     def multiline_text(self, xy, text, fill=None, font=None, anchor=None, outline=None,
                        spacing=4, align="left"):
+        """
+        Draws multiline text on the image
+        """
+
         widths = []
         max_width = 0
         lines = self._multiline_split(text)
@@ -530,33 +603,38 @@ class ImageDraw2(ImageDraw):
                 assert False, 'align must be "left", "center" or "right"'
             self.text((left, top), line, fill, font, anchor)
 
-            for kw in self.__keywords:
-                if kw in line:
-                    index = 0
-                    while index != -1:
-                        index = line.find(kw, index)
-                        if index != -1:
-                            skip_area = self.textsize(line[:index], font)
-                            bbox = self.textsize(get_word(line[index:]), font)
-
-                            text_start_x = left + skip_area[0] - 1
-                            text_end_x = text_start_x + bbox[0] + 1
-                            bbox = [text_start_x, top, text_end_x, top + line_spacing]
-                            # self.rectangle(bbox, outline=outline)
-
-                            arr = self.__bbox.get(kw, [])
-                            arr.append(BoundingBox(bbox, outline))
-                            self.__bbox[kw] = arr
-
-                            index += 1
+            self.__find_bounding_boxes(font, left, line, line_spacing, outline, top)
 
             top += line_spacing
             left = xy[0]
 
         return [left, top_initial, left + max_width, top]
 
+    def __find_bounding_boxes(self, font, left, line, line_spacing, outline, top):
+        for kw in self.__keywords:
+            if kw in line:
+                index = 0
+                while index != -1:
+                    index = line.find(kw, index)
+                    if index != -1:
+                        skip_area = self.textsize(line[:index], font)
+                        bbox = self.textsize(get_word(line[index:]), font)
+
+                        text_start_x = left + skip_area[0] - 1
+                        text_end_x = text_start_x + bbox[0] + 1
+                        bbox = [text_start_x, top, text_end_x, top + line_spacing]
+                        # self.rectangle(bbox, outline=outline)
+
+                        arr = self.__bbox.get(kw, [])
+                        arr.append(BoundingBox(bbox, outline))
+                        self.__bbox[kw] = arr
+
+                        index += 1
+
     def split_text_to_multiline(self, text, font, width, spacing):
         """
+        Splits long text to multiline text if text don't fit in available width
+
         :type text: str
         :type font: ImageFont
         :type width: int|float
