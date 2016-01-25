@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os
 from enum import Enum
 from itertools import groupby
@@ -198,7 +200,7 @@ class Page(object):
         self.__texts = []
         self.__image = None
         self.__bgimage = None
-        self.__filename = None
+        self.__filename = ""
         self.__bbox = {}
 
         self.__styles = {
@@ -557,7 +559,7 @@ class ImageDraw2(ImageDraw):
         """
         :type text: str
         :type font: ImageFont
-        :type width: int
+        :type width: int|float
         :type spacing: int
         """
         size = self.textsize(text, font)
@@ -574,7 +576,7 @@ class ImageDraw2(ImageDraw):
         return SplitResult(text, size)
 
 
-def test():
+def __test():
     test_page = Page(0, 400, 400)
     style = Style.normal
     text = "The quick brown fox jumps over the lazy dog"
@@ -613,12 +615,6 @@ def test():
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
     t4 = Text(2, text, ['brown'], Type.east, style,
               XLocation.left, YLocation.top,
-              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t5 = Text(3, text, ['brown'], Type.east, style,
-              XLocation.right, YLocation.bottom,
-              None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
-    t6 = Text(4, text, ['brown'], Type.east, style,
-              XLocation.right, YLocation.bottom,
               None, fgcolor=(0, 0, 0), bgcolor=bgcolor)
 
     t5 = Text(3, text, ['brown'], Type.east, style,
@@ -699,4 +695,4 @@ def test():
 
 
 if __name__ == '__main__':
-    test()
+    __test()
