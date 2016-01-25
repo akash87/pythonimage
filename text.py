@@ -8,7 +8,7 @@ from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw
 import math
 import sys
-from bezier import smooth_points, point_distance, convert_to_degree, get_angle
+from bezier import smooth_points, convert_to_degree, get_angle
 
 
 class Type(Enum):
@@ -335,17 +335,13 @@ class Page(object):
         y_min = y
 
         for t in group:
-            style = self.__styles[t.style]
-            line_height = style.line_height
-            font = ImageFont.truetype(style.font_face, size=style.font_size)
-            symbol_size = self.__text_draw.textsize('A', font=font)[1]
-            spacing = line_height - symbol_size
-
-            split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
+            split = self.__split_text(box_width, t)
+            spacing = split.spacing
+            font = split.font
 
             self.__text_draw.set_keywords(t.keywords)
-            bbox = self.__text_draw.multiline_text((x, y), split.text,
-                                                   fill=t.fgcolor, font=font, align=align, outline=t.fgcolor)
+            bbox = self.__text_draw.multiline_text((x, y), split.text, font=font,
+                                                   fill=t.fgcolor, align=align, outline=t.fgcolor)
             self.__update_bbox_dict(self.__text_draw.bbox)
 
             x_min = min(x_min, bbox[0])
@@ -356,6 +352,26 @@ class Page(object):
         bg = group[0].bgcolor
         if bg is not None:
             self.__bgdraw.rectangle([x_min, y_min, x_max, y], fill=bg)
+
+    def __split_text(self, box_width, t):
+        """
+        Splits text if text width will be wider than box_width.
+        Also, calculates space required, spacings and etc.
+
+        :type box_width: int
+        :type t: Text
+        """
+        style = self.__styles[t.style]
+        line_height = style.line_height
+        font = ImageFont.truetype(style.font_face, size=style.font_size)
+        symbol_height = self.__text_draw.textsize('A', font=font)[1]
+        spacing = line_height - symbol_height
+
+        split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
+        split.symbol_height = symbol_height
+        split.spacing = spacing
+
+        return split
 
     def __calc_y_top(self, yloc, group):
         """
@@ -380,18 +396,14 @@ class Page(object):
 
     def __calc_y_top_from_start_y(self, group, width, y, yloc):
         for t in group:
-            style = self.__styles[t.style]
-            line_height = style.line_height
-            font = ImageFont.truetype(style.font_face, size=style.font_size)
-            symbol_size = self.__text_draw.textsize('A', font=font)[1]
-            spacing = line_height - symbol_size
-            split = self.__text_draw.split_text_to_multiline(t.value, font, width, spacing)
+            split = self.__split_text(width, t)
             size = split.size
 
             if yloc == YLocation.center:
                 y -= size[1] / 2
             else:
                 y -= size[1]
+
         return y
 
     def __draw_bottom(self, group):
@@ -402,31 +414,24 @@ class Page(object):
         y = self.__height
 
         for t in group:
-            style = self.__styles[t.style]
-            font = ImageFont.truetype(style.font_face, size=style.font_size)
-            symbol_size = get_symbol_size(font)
-            spacing = style.line_height - symbol_size[1]
+            splitted = self.__split_text(self.__width, t)
+            symbol_size = splitted.symbol_height
 
-            splitted = self.__text_draw.split_text_to_multiline(t.value, font, self.__width, spacing)
-
-            y -= splitted.size[1] + symbol_size[1]
+            y -= splitted.size[1] + symbol_size
 
         y_min = y
 
         for t in group:
-            style = self.__styles[t.style]
-            font = ImageFont.truetype(style.font_face, size=style.font_size)
-            symbol_size = get_symbol_size(font)
-            spacing = style.line_height - symbol_size[1]
-
-            splitted = self.__text_draw.split_text_to_multiline(t.value, font, self.__width, spacing)
+            splitted = self.__split_text(self.__width, t)
+            symbol_size = splitted.symbol_height
+            font = splitted.font
 
             self.__text_draw.set_keywords(t.keywords)
-            self.__text_draw.multiline_text((symbol_size[0] * 2, y), splitted.text,
+            self.__text_draw.multiline_text((symbol_size * 2, y), splitted.text,
                                             fill=t.fgcolor, font=font, outline=t.fgcolor)
             self.__update_bbox_dict(self.__text_draw.bbox)
 
-            y += splitted.size[1] + symbol_size[1]
+            y += splitted.size[1] + symbol_size
 
         bg = group[0].bgcolor
         if bg is not None:
@@ -475,13 +480,8 @@ class Page(object):
         text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
         center = [text_center_x, text_center_y]
 
-        style = self.__styles[t.style]
-        line_height = style.line_height
-        font = ImageFont.truetype(style.font_face, size=style.font_size)
-        symbol_size = self.__text_draw.textsize('A', font=font)[1]
-        spacing = line_height - symbol_size
-
-        split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
+        split = self.__split_text(box_width, t)
+        font = split.font
 
         self.__text_draw.set_keywords(t.keywords)
         self.__text_draw.multiline_text(center, split.text, font=font,
@@ -514,9 +514,12 @@ class Page(object):
 
 
 class SplitResult(object):
-    def __init__(self, text, size):
+    def __init__(self, text, size, font):
         self.text = text
         self.size = size
+        self.symbol_height = 10 if font is None else font.size
+        self.font = font
+        self.spacing = 2
 
     def __str__(self):
         return str.format("Size={0} Text={1}", self.size, self.text)
@@ -652,7 +655,7 @@ class ImageDraw2(ImageDraw):
         """
         size = self.textsize(text, font)
         if size[0] < width:
-            return SplitResult(text, size)
+            return SplitResult(text, size, font)
 
         symbol_size = self.textsize('A', font=font)
         symbol_width = symbol_size[0]
@@ -661,7 +664,7 @@ class ImageDraw2(ImageDraw):
         text = textwrap.fill(text, width=max_symbols_in_line)
         size = self.multiline_textsize(text, font, spacing)
 
-        return SplitResult(text, size)
+        return SplitResult(text, size, font)
 
 
 def __test():
