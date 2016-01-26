@@ -679,7 +679,17 @@ class ImageDraw2(ImageDraw):
         symbol_width = symbol_size[0]
         max_symbols_in_line = int(width / symbol_width)
 
-        text = textwrap.fill(text, width=max_symbols_in_line)
-        size = self.multiline_textsize(text, font, spacing)
+        total_width = 0
+        total_height = 0
 
-        return SplitResult(text, size, font)
+        lines = []
+        for line in text.splitlines():
+            line = textwrap.fill(line, width=max_symbols_in_line)
+            w, h = self.multiline_textsize(line, font, spacing)
+            total_width += w
+            total_height += h
+            lines.append(line)
+
+        result_text = "\n".join(lines)
+        result_size = (total_width, total_height)
+        return SplitResult(result_text, result_size, font)
