@@ -15,6 +15,8 @@ class Type(Enum):
     default = 'default'
     east = 'east'
     west = 'west'
+    polygon = 'polygon'
+    callout = 'callout'
 
 
 class Style(Enum):
@@ -72,7 +74,7 @@ def centroid(points):
     return center
 
 
-def get_callout_width(points):
+def get_polygon_width(points):
     """
     Get the available width of callout to place text
 
@@ -205,20 +207,13 @@ class Text(object):
     def bocolor(self):
         return self.__boColor
 
+    @bocolor.setter
+    def bocolor(self, color=None):
+        self.__boColor = color
+
     @property
     def points(self):
         return self.__points
-
-    @bocolor.setter
-    def bocolor(self, color=None):
-        if not isinstance(color, tuple):
-            raise Exception("color should be tuple")
-
-        if len(color) not in (3, 4):
-            raise Exception("color should be defined as 3")
-
-        color = color if color else (0, 0, 0)
-        self.__boColor = color
 
     def __str__(self):
         return str.format('Type: {0}, xloc: {1}, yloc: {2}, value: {3}', self.type, self.xloc, self.yloc, self.value)
@@ -287,16 +282,22 @@ class Page(object):
         self.__high_draw = ImageDraw(self.__highimage, mode="RGBA")
 
         callouts = []
+        polygons = []
         boxed_texts = []
 
         for t in self.__texts:
-            if t.points:
+            if t.type == Type.callout:
                 callouts.append(t)
+            elif t.type == Type.polygon:
+                polygons.append(t)
             else:
                 boxed_texts.append(t)
 
-        for callout in callouts:
+        for callout in sorted(callouts, key=lambda x: x.index):
             self.__draw_callout(callout)
+
+        for polygon in sorted(polygons, key=lambda x: x.index):
+            self.__draw_polygon(polygon)
 
         for key, group in groupby(boxed_texts, lambda x: [x.type, x.xloc, x.yloc]):
             group = list(sorted(group, key=lambda x: x.index))
@@ -479,6 +480,30 @@ class Page(object):
 
         self.__styles[style] = StyleInfo(font_size, line_height, font_weight)
 
+    def __draw_polygon(self, t):
+        """
+        Draws polygon using Text.points
+
+        :type t: Text
+        """
+        points = t.points
+
+        # Draw polygon
+        self.__bgdraw.polygon(points, fill=t.bgcolor, outline=t.bocolor)
+
+        text_center_x, text_center_y = centroid(points)
+        box_width = get_polygon_width(points)
+        text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
+        center = [text_center_x, text_center_y]
+
+        split = self.__split_text(box_width, t)
+        font = split.font
+
+        self.__text_draw.set_keywords(t.keywords)
+        self.__text_draw.multiline_text(center, split.text, font=font,
+                                        fill=t.fgcolor, align="center", outline=t.fgcolor)
+        self.__update_bbox_dict(self.__text_draw.bbox)
+
     def __draw_callout(self, t):
         """
         Draws callout using Text.points
@@ -495,7 +520,7 @@ class Page(object):
         # remove callout angle from polygon to recognize callout center
         points_no_callout_center = self.__get_points_without_callout_angle_center(all_points)
         text_center_x, text_center_y = centroid(points_no_callout_center)
-        box_width = get_callout_width(points_no_callout_center)
+        box_width = get_polygon_width(points_no_callout_center)
         text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
         center = [text_center_x, text_center_y]
 

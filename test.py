@@ -195,7 +195,7 @@ def __test():
     t4 = Text(3,
               "1\n 2 3\n 4 5 6 7 6 5 4 3 2 1 2 3 4 5 6 7 8 9 0 9 8 7 8 9 7 6 5 5 4 3 2 2 3 4 2 3 2 13 3 4"
               "  6 6 7 7 5 43 3 2 2  3 4 45 5  6 77 8 99 77 5 45", [],
-              Type.default, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0000", bgopacity=0.5,
+              Type.polygon, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0000", bgopacity=0.5,
               points=[(299, 345),
                       (248, 379),
                       (231, 409),
@@ -221,7 +221,7 @@ def __test():
               "A hamster does not need many supplies. Every hamster needs shelter, water and food. A hamster should "
               "have a large cage that it cannot escape from. The cage needs some sort of soft bedding, such as wood "
               "shavings. You should get a water bottle and food bowl to put in the cage.", [],
-              Type.default, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
+              Type.callout, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
               points=[(578, 55),
                       (540, 115),
                       (400, 155),
