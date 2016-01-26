@@ -5,7 +5,7 @@ from enum import Enum
 from itertools import groupby
 import textwrap
 from PIL import ImageFont, Image
-from PIL.ImageDraw import ImageDraw
+from PIL.ImageDraw import ImageDraw, ImageColor
 import math
 import sys
 from bezier import smooth_points, convert_to_degree, get_angle
@@ -86,7 +86,15 @@ def get_callout_width(points):
         min_x = min(min_x, point[0])
         max_x = max(max_x, point[1])
 
-    return int(math.floor(math.fabs(max_x - min_x) * 0.8))
+    return int(math.floor(math.fabs(max_x - min_x)))
+
+
+def get_color(color):
+    if isinstance(color, str):
+        return ImageColor.getcolor(color, "RGB")
+    if isinstance(color, (tuple, list)):
+        return tuple(color[:3])
+    return color
 
 
 class Text(object):
@@ -100,7 +108,8 @@ class Text(object):
                  yloc=YLocation.center,
                  points=None,
                  fgcolor=None,
-                 bgcolor=None, bgopacity=1.0):
+                 bgcolor=None,
+                 bgopacity=0.3):
         """
         :type index: int
         :type value: str
@@ -111,6 +120,8 @@ class Text(object):
         :type yloc: YLocation
         :type points: list[tuple(3)]
         """
+        assert 0 <= bgopacity <= 1
+
         super(Text, self).__init__()
         self.__index = index
         self.__value = value
@@ -120,11 +131,18 @@ class Text(object):
         self.__xloc = xloc
         self.__yloc = yloc
         self.__boWidth = 2
-        self.__boColor = (255, 255, 255)
+        self.__boColor = (0, 0, 0)
         self.__fgcolor = fgcolor or (255, 255, 255)
-        self.__bgcolor = bgcolor
-        self.__bgOpacity = 0.0 if bgcolor is None else bgopacity
         self.__points = points
+
+        if bgcolor:
+            bgcolor = get_color(bgcolor)
+            bgcolor = bgcolor[:] + (int(bgopacity * 255),)
+            self.__bgcolor = bgcolor
+            self.__bgOpacity = bgopacity
+        else:
+            self.__bgcolor = None
+            self.__bgOpacity = 0
 
     @property
     def fgcolor(self):
