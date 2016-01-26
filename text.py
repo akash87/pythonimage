@@ -633,8 +633,8 @@ class ImageDraw2(ImageDraw):
                         skip_area = self.textsize(line[:index], font)
                         bbox = self.textsize(get_word(line[index:]), font)
 
-                        text_start_x = left + skip_area[0] - 1
-                        text_end_x = text_start_x + bbox[0] + 1
+                        text_start_x = left + skip_area[0] - 2
+                        text_end_x = text_start_x + bbox[0] + 3
                         bbox = [text_start_x, top, text_end_x, top + line_spacing]
                         # self.rectangle(bbox, outline=outline)
 
