@@ -3,7 +3,6 @@ from collections import defaultdict
 
 import os
 from enum import Enum
-from itertools import groupby
 from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw, ImageColor
 import math
@@ -264,10 +263,10 @@ class Page(object):
         self.__callout_smooth_factor = 0.5
 
         self.__styles = {
-            Style.normal: StyleInfo(20, 25, 'regular'),
-            Style.h1: StyleInfo(26, 28, 'regular'),
-            Style.h2: StyleInfo(22, 24, 'regular'),
-            Style.h3: StyleInfo(20, 22, 'regular'),
+            Style.normal: StyleInfo(20, 25),
+            Style.h1: StyleInfo(26, 28),
+            Style.h2: StyleInfo(22, 24),
+            Style.h3: StyleInfo(20, 22),
         }
 
     # noinspection PyPep8Naming
@@ -453,11 +452,16 @@ class Page(object):
 
         y = self.__height
 
-        for t in group:
+        group_count = len(group)
+        for idx, t in enumerate(group):
             splitted = self.__split_text(self.__width, t)
             symbol_size = splitted.symbol_height
+            y -= splitted.size[1]
 
-            y -= splitted.size[1] + symbol_size
+            if idx != group_count - 1:
+                y -= symbol_size
+            else:
+                y -= 2
 
         y_min = y
 
@@ -498,17 +502,16 @@ class Page(object):
             for box in boxes:
                 arr.append(box)
 
-    def set_font_style(self, style, font_size, line_height, font_weight):
+    def set_font_style(self, style, font_size, line_height):
         """
         Changes style for drawn texts
 
         :type style: Style
         :type font_size: int
         :type line_height: int
-        :type font_weight: str
         """
 
-        self.__styles[style] = StyleInfo(font_size, line_height, font_weight)
+        self.__styles[style] = StyleInfo(font_size, line_height)
 
     def __draw_polygon(self, t):
         """
@@ -615,14 +618,13 @@ class BoundingBox(object):
 
 
 class StyleInfo(object):
-    def __init__(self, font_size, line_height, font_weight):
+    def __init__(self, font_size, line_height):
         self.font_size = font_size
         self.line_height = line_height
-        self.font_weight = font_weight
         self.font_face = "arial.ttf"
 
     def __str__(self):
-        return str.format("FS={0} LH={1} FW={2}", self.font_size, self.line_height, self.font_weight)
+        return str.format("FS={0} LH={1} FW={2}", self.font_size, self.line_height)
 
 
 def get_word(line):
@@ -685,6 +687,7 @@ class ImageDraw2(ImageDraw):
         left, top = xy
         top_initial = top
 
+        lines_count = len(lines)
         for idx, line in enumerate(lines):
             if align == "left":
                 pass  # left = x
@@ -698,8 +701,9 @@ class ImageDraw2(ImageDraw):
 
             self.__find_bounding_boxes(font, left, line, line_spacing, outline, top)
 
-            top += line_spacing
             left = xy[0]
+            if idx != lines_count - 1:
+                top += line_spacing
 
         return [left, top_initial, left + max_width, top]
 

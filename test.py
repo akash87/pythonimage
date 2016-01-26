@@ -1,5 +1,4 @@
 from unittest import TestCase
-import unittest
 from text import *
 from bezier import line, get_angle, convert_to_degree
 
@@ -168,7 +167,6 @@ def __test():
 
     test_page.generateTextImage([t1, t2, t3, t4, t5], '4.png')
 
-    test_page = Page(0, 1024, 576)
     coords = [(100, 300), (200, 250),
               (300, 100), (500, 100),
               (500, 300), (300, 300)]
@@ -177,6 +175,9 @@ def __test():
     t1 = Text(3, text, ['123', '456'], points=coords, bgcolor=bgcolor, fgcolor='black', style=Style.h1)
 
     test_page.generateTextImage([t1], '5.png')
+
+    polygon_page = Page(0, 1024, 576)
+    polygon_page.set_font_style(Style.normal, 16, 20)
 
     t1 = Text(0,
               "BOTTOM\nLEFT WEST\nWorld champion Viswanathan Anand started his title defence in style, holding off"
@@ -235,7 +236,7 @@ def __test():
                       (714, 22),
                       (635, 23)])
 
-    test_page.generateTextImage([t1, t2, t3, t4, t5], 'test1.png')
+    polygon_page.generateTextImage([t1, t2, t3, t4, t5], 'test1.png')
 
     t4 = Text(3,
               "1\n 2 3\n 4 5 6 7 6 5 4 3 2 1 2 3 4 5 6 7 8 9 0 9 8 7 8 9 7 6 5 5 4 3 2 2 3 4 2 3 2 13 3 4"
@@ -271,7 +272,7 @@ def __test():
                       (714, 22),
                       (635, 23)])
 
-    test_page.generateTextImage([t4, t5], 'test2.png')
+    polygon_page.generateTextImage([t4, t5], 'test2.png')
 
     t1 = Text(0,
               "BOTTOM\nLEFT WEST\nWorld champion Viswanathan Anand started his title defence in style, holding off"
