@@ -3,12 +3,12 @@
 import os
 from enum import Enum
 from itertools import groupby
-import textwrap
 from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw, ImageColor
 import math
 import sys
 from bezier import smooth_points, convert_to_degree, get_angle
+import textwrap2
 
 
 class Type(Enum):
@@ -86,7 +86,7 @@ def get_callout_width(points):
         min_x = min(min_x, point[0])
         max_x = max(max_x, point[1])
 
-    return int(math.floor(math.fabs(max_x - min_x)))
+    return int(math.floor(math.fabs(max_x - min_x)) * 0.8)
 
 
 def get_color(color):
@@ -440,12 +440,13 @@ class Page(object):
         y_min = y
 
         for t in group:
-            splitted = self.__split_text(self.__width, t)
+            margin = 3
+            splitted = self.__split_text(self.__width - 2 * margin, t)
             symbol_size = splitted.symbol_height
             font = splitted.font
 
             self.__text_draw.set_keywords(t.keywords)
-            self.__text_draw.multiline_text((symbol_size * 2, y), splitted.text,
+            self.__text_draw.multiline_text((margin, y), splitted.text,
                                             fill=t.fgcolor, font=font, outline=t.fgcolor)
             self.__update_bbox_dict(self.__text_draw.bbox)
 
@@ -675,16 +676,13 @@ class ImageDraw2(ImageDraw):
         if size[0] < width:
             return SplitResult(text, size, font)
 
-        symbol_size = self.textsize('A', font=font)
-        symbol_width = symbol_size[0]
-        max_symbols_in_line = int(width / symbol_width)
-
         total_width = 0
         total_height = 0
 
         lines = []
         for line in text.splitlines():
-            line = textwrap.fill(line, width=max_symbols_in_line)
+            w = textwrap2.TextWrapper(font, width=width)
+            line = w.fill(line)
             w, h = self.multiline_textsize(line, font, spacing)
             total_width += w
             total_height += h
