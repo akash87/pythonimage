@@ -4,6 +4,18 @@ from text import *
 from bezier import line, get_angle, convert_to_degree
 
 
+class TestColor(TestCase):
+    def testColorParsed(self):
+        t = Text(0, "", [], bgcolor="#cccccc", bgopacity=0.3)
+        self.assertEqual(t.bgcolor, (204, 204, 204, 76))
+
+        t = Text(0, "", [], bgcolor=(204, 204, 204), bgopacity=0.3)
+        self.assertEqual(t.bgcolor, (204, 204, 204, 76))
+
+        t = Text(0, "", [], bgcolor=(204, 204, 204, 76), bgopacity=0.3)
+        self.assertEqual(t.bgcolor, (204, 204, 204, 76))
+
+
 class TestCentroid(TestCase):
     def testEmpty(self):
         points = []
@@ -52,10 +64,10 @@ class TestCreateLine(TestCase):
 
 
 def __test():
-    test_page = Page(0, 400, 400)
+    test_page = Page(0, 1024, 576)
     style = Style.normal
     text = "The quick brown fox jumps over the lazy dog"
-    bgcolor = (253, 120, 120, 70)
+    bgcolor = (253, 120, 120)
 
     t1 = Text(0, text, [], Type.default, style,
               XLocation.left, YLocation.top,
@@ -156,7 +168,7 @@ def __test():
 
     test_page.generateTextImage([t1, t2, t3, t4, t5], '4.png')
 
-    test_page = Page(0, 600, 600)
+    test_page = Page(0, 1024, 576)
     coords = [(100, 300), (200, 250),
               (300, 100), (500, 100),
               (500, 300), (300, 300)]
@@ -167,7 +179,143 @@ def __test():
     # test_page.set_font_style(Style.normal, 6, 8, 'normal')
     test_page.generateTextImage([t1], '5.png')
 
+    t1 = Text(0,
+              "BOTTOM\nLEFT WEST\nWorld champion Viswanathan Anand started his title defence in style, holding off"
+              " world number one Magnus Carlsen of Norway to a draw in quick time in the.", [],
+              Type.west, Style.normal, XLocation.left, YLocation.bottom, fgcolor="#FFFFFF", bgcolor="#cccccc",
+              bgopacity=0.5)
+    t2 = Text(1,
+              "DEFAULT One - 1 One = 1 ONe ===  1", [], Type.default, Style.h2, XLocation.left, YLocation.top,
+              fgcolor="#ffffff", bgcolor="#000000", bgopacity=0.5)
+
+    t3 = Text(2,
+              "RIGHT BOTTOM EAST on same location 2", [], Type.east, Style.normal, XLocation.right, YLocation.bottom,
+              fgcolor="#ffffff", bgcolor="#000000", bgopacity=0.5)
+
+    t4 = Text(3,
+              "1\n 2 3\n 4 5 6 7 6 5 4 3 2 1 2 3 4 5 6 7 8 9 0 9 8 7 8 9 7 6 5 5 4 3 2 2 3 4 2 3 2 13 3 4"
+              "  6 6 7 7 5 43 3 2 2  3 4 45 5  6 77 8 99 77 5 45", [],
+              Type.default, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0000", bgopacity=0.5,
+              points=[(299, 345),
+                      (248, 379),
+                      (231, 409),
+                      (220, 454),
+                      (221, 518),
+                      (243, 550),
+                      (286, 562),
+                      (358, 569),
+                      (432, 570),
+                      (491, 567),
+                      (500, 543),
+                      (505, 500),
+                      (506, 450),
+                      (502, 418),
+                      (462, 397),
+                      (412, 379),
+                      (353, 366),
+                      (332, 353),
+                      (353, 310),
+                      (305, 338)])
+
+    t5 = Text(4,
+              "A hamster does not need many supplies. Every hamster needs shelter, water and food. A hamster should "
+              "have a large cage that it cannot escape from. The cage needs some sort of soft bedding, such as wood "
+              "shavings. You should get a water bottle and food bowl to put in the cage.", [],
+              Type.default, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
+              points=[(578, 55),
+                      (540, 115),
+                      (400, 155),
+                      (554, 172),
+                      (600, 217),
+                      (667, 232),
+                      (745, 223),
+                      (794, 197),
+                      (823, 146),
+                      (817, 87),
+                      (774, 44),
+                      (714, 22),
+                      (635, 23)])
+
+    test_page.generateTextImage([t1, t2, t3, t4, t5], 'test1.png')
+
+    t1 = Text(0,
+              "BOTTOM\nLEFT WEST\nWorld champion Viswanathan Anand started his title defence in style, holding off"
+              " world number one Magnus Carlsen of Norway to a draw in quick time in the.",
+              [], Type.west, Style.normal, xloc=XLocation.left, yloc=YLocation.bottom, fgcolor="#FFFFFF",
+              bgcolor="#cccccc", bgopacity=0.5)
+
+    t2 = Text(1,
+              "CENTER CENTER WEST World champion Viswanathan Anand started his title defence in style, holding off "
+              "world number one Magnus Carlsen of Norway to a draw in quick time in the.",
+              [], Type.west, Style.h1, xloc=XLocation.center, yloc=YLocation.center, fgcolor="#170170",
+              bgcolor="#00C00C", bgopacity=0.5)
+
+    t3 = Text(2,
+              "TOP RIGHT WEST World champion \n Viswanathan \n Anand \n started his title defence in style, holding "
+              "off world number one Magnus Carlsen of Norway to a draw in quick time in the.",
+              [], Type.west, Style.h2, xloc=XLocation.right, yloc=YLocation.top, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+
+    t4 = Text(3,
+              "BOTTOM LEFT EAST World champion \n Viswanathan \n Anand \n started his title defence in style, holding "
+              "off world number one Magnus Carlsen of Norway to a draw in quick time in the.",
+              [], Type.east, Style.h3, xloc=XLocation.left, yloc=YLocation.bottom, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+
+    t5 = Text(4,
+              "CENTER CENTER EAST on same location 1",
+              [], Type.east, Style.normal, xloc=XLocation.center, yloc=YLocation.center, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+
+    t6 = Text(5,
+              "CENTER CENTER EAST on same location 2",
+              [], Type.east, Style.normal, xloc=XLocation.center, yloc=YLocation.center, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+
+    t7 = Text(6,
+              "CENTER CENTER EAST on same location 3",
+              [], Type.east, Style.normal, xloc=XLocation.center, yloc=YLocation.center, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+
+    t8 = Text(7,
+              "RIGHT BOTTOM EAST on same location 1",
+              [], Type.east, Style.normal, xloc=XLocation.right, yloc=YLocation.bottom, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+    t9 = Text(8,
+              "RIGHT BOTTOM EAST on same location 2",
+              [], Type.east, Style.normal, xloc=XLocation.right, yloc=YLocation.bottom, fgcolor="#ffffff",
+              bgcolor="#000000", bgopacity=0.5)
+
+    t10 = Text(9,
+               "RIGHT BOTTOM EAST on same location 3",
+               [], Type.east, Style.normal, xloc=XLocation.right, yloc=YLocation.bottom, fgcolor="#ffffff",
+               bgcolor="#000000", bgopacity=0.5)
+
+    t11 = Text(11,
+               "DEFAULT One - 1 One = 1 ONe ===  1",
+               [], Type.default, Style.h2, xloc=XLocation.left, yloc=YLocation.top, fgcolor="#ffffff",
+               bgcolor="#000000", bgopacity=0.5)
+
+    t12 = Text(12,
+               "DEFAULT Two 2 = Two = 2 ===Two 2",
+               [], Type.default, Style.h2, xloc=XLocation.left, yloc=YLocation.top, fgcolor="#ffffff",
+               bgcolor="#000000", bgopacity=0.5)
+
+    test_page.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12], 'test2.png')
+
+    t1 = Text(0,
+              "Brady's numbers were hardly noteworthy. He was 25 for 43, with 269 yards passing, a touchdown and an "
+              "interception. But it was his sense of timing, and the killer instinct he displayed on New England's "
+              "final drive that will be seared into our memories and become New England football folklore. And unless "
+              "the Patriots win another Super Bowl this time, or least make it to Met Life Stadium in the snow and cold"
+              " of February, his 17-yard TD pass to rookie Kenbrell Thompkins with five seconds to play will be the"
+              " signature moment of their season.",
+              [])
+
+    test_page.set_font_style(Style.normal, 14, 16, 'bold')
+    test_page.generateTextImage([t1], 'test4.png')
+
 
 if __name__ == '__main__':
     __test()
-    unittest.main()
+# unittest.main()
