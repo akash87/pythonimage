@@ -176,7 +176,6 @@ def __test():
     text = '123 456'
     t1 = Text(3, text, ['123', '456'], points=coords, bgcolor=bgcolor, fgcolor='black', style=Style.h1)
 
-    # test_page.set_font_style(Style.normal, 6, 8, 'normal')
     test_page.generateTextImage([t1], '5.png')
 
     t1 = Text(0,
@@ -221,7 +220,7 @@ def __test():
               "A hamster does not need many supplies. Every hamster needs shelter, water and food. A hamster should "
               "have a large cage that it cannot escape from. The cage needs some sort of soft bedding, such as wood "
               "shavings. You should get a water bottle and food bowl to put in the cage.", [],
-              Type.callout, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
+              Type.polygon, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
               points=[(578, 55),
                       (540, 115),
                       (400, 155),
@@ -238,6 +237,42 @@ def __test():
 
     test_page.generateTextImage([t1, t2, t3, t4, t5], 'test1.png')
 
+    t4 = Text(3,
+              "1\n 2 3\n 4 5 6 7 6 5 4 3 2 1 2 3 4 5 6 7 8 9 0 9 8 7 8 9 7 6 5 5 4 3 2 2 3 4 2 3 2 13 3 4"
+              "  6 6 7 7 5 43 3 2 2  3 4 45 5  6 77 8 99 77 5 45", [],
+              Type.polygon, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0000", bgopacity=0.5,
+              points=[(142, 113),
+                      (282, 39),
+                      (424, 135),
+                      (390, 201),
+                      (500, 300),
+                      (332, 221),
+                      (128, 273),
+                      (132, 173),
+                      (142, 113)
+                      ])
+
+    t5 = Text(4,
+              "A hamster does not need many supplies. Every hamster needs shelter, water and food. A hamster should "
+              "have a large cage that it cannot escape from. The cage needs some sort of soft bedding, such as wood "
+              "shavings. You should get a water bottle and food bowl to put in the cage.", [],
+              Type.callout, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
+              points=[(578, 55),
+                      (540, 115),
+                      (400, 155),
+                      (554, 172),
+                      (600, 217),
+                      (667, 232),
+                      (745, 223),
+                      (794, 197),
+                      (823, 146),
+                      (817, 87),
+                      (774, 44),
+                      (714, 22),
+                      (635, 23)])
+
+    test_page.generateTextImage([t4, t5], 'test2.png')
+
     t1 = Text(0,
               "BOTTOM\nLEFT WEST\nWorld champion Viswanathan Anand started his title defence in style, holding off"
               " world number one Magnus Carlsen of Norway to a draw in quick time in the.",
@@ -251,7 +286,7 @@ def __test():
               bgcolor="#00C00C", bgopacity=0.5)
 
     t3 = Text(2,
-              "TOP RIGHT WEST World champion \n Viswanathan \n Anand \n started his title defence in style, holding "
+              "TOP RIGHT WEST\nWorld champion \n Viswanathan \n Anand \n started his title defence in style, holding "
               "off world number one Magnus Carlsen of Norway to a draw in quick time in the.",
               [], Type.west, Style.h2, xloc=XLocation.right, yloc=YLocation.top, fgcolor="#ffffff",
               bgcolor="#000000", bgopacity=0.5)
@@ -301,7 +336,7 @@ def __test():
                [], Type.default, Style.h2, xloc=XLocation.left, yloc=YLocation.top, fgcolor="#ffffff",
                bgcolor="#000000", bgopacity=0.5)
 
-    test_page.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12], 'test2.png')
+    test_page.generateTextImage([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12], 'test3.png')
 
     t1 = Text(0,
               "Brady's numbers were hardly noteworthy. He was 25 for 43, with 269 yards passing, a touchdown and an "
@@ -310,9 +345,8 @@ def __test():
               "the Patriots win another Super Bowl this time, or least make it to Met Life Stadium in the snow and cold"
               " of February, his 17-yard TD pass to rookie Kenbrell Thompkins with five seconds to play will be the"
               " signature moment of their season.",
-              [])
+              [], bgcolor=(0, 0, 0))
 
-    test_page.set_font_style(Style.normal, 14, 16, 'bold')
     test_page.generateTextImage([t1], 'test4.png')
 
 

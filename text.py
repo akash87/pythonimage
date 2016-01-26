@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from collections import defaultdict
 
 import os
 from enum import Enum
@@ -97,6 +98,33 @@ def get_color(color):
     if isinstance(color, (tuple, list)):
         return tuple(color[:3])
     return color
+
+
+def full_group_by(l, key=lambda x: x):
+    d = defaultdict(list)
+    for item in l:
+        key1 = key(item)
+        d[key1].append(item)
+    return d.items()
+
+
+class TextGroup(object):
+    # noinspection PyShadowingBuiltins
+    def __init__(self, type, xloc, yloc):
+        self.type = type
+        self.xloc = xloc
+        self.yloc = yloc
+
+    def __str__(self):
+        return str.format("{0}{1}{2}", self.type, self.xloc, self.yloc)
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        return self.type == other.type and \
+               self.xloc == other.xloc and \
+               self.yloc == other.yloc
 
 
 class Text(object):
@@ -229,17 +257,16 @@ class Page(object):
         self.__height = height
 
         self.__texts = []
-        self.__image = None
-        self.__bgimage = None
+        self.__images = []
         self.__filename = ""
         self.__bbox = {}
         self.__callout_pointer_angle = 45
         self.__callout_smooth_factor = 0.5
 
         self.__styles = {
-            Style.normal: StyleInfo(10, 12, 'regular'),
-            Style.h1: StyleInfo(30, 32, 'regular'),
-            Style.h2: StyleInfo(24, 26, 'regular'),
+            Style.normal: StyleInfo(20, 25, 'regular'),
+            Style.h1: StyleInfo(26, 28, 'regular'),
+            Style.h2: StyleInfo(22, 24, 'regular'),
             Style.h3: StyleInfo(20, 22, 'regular'),
         }
 
@@ -263,6 +290,7 @@ class Page(object):
         self.__filename = imagefile
         self.__texts = texts
         self.__bbox.clear()
+        self.__images = []
 
         self.__draw_image()
 
@@ -272,49 +300,38 @@ class Page(object):
         """
         Draws the images (with and without keywords highlighted)
         """
+        result = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+        self.__text_helper = ImageDraw2(result, mode='RGBA')
+        result = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
 
-        self.__image = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
-        self.__bgimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
-        self.__highimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+        texts = list(sorted(self.__texts, key=lambda x: x.index))
 
-        self.__text_draw = ImageDraw2(self.__image, mode="RGBA")
-        self.__bgdraw = ImageDraw(self.__bgimage, mode="RGBA")
-        self.__high_draw = ImageDraw(self.__highimage, mode="RGBA")
+        for key, group in full_group_by(texts, lambda x: TextGroup(x.type, x.xloc, x.yloc)):
+            type_ = key.type
+            group = list(group)
 
-        callouts = []
-        polygons = []
-        boxed_texts = []
-
-        for t in self.__texts:
-            if t.type == Type.callout:
-                callouts.append(t)
-            elif t.type == Type.polygon:
-                polygons.append(t)
-            else:
-                boxed_texts.append(t)
-
-        for callout in sorted(callouts, key=lambda x: x.index):
-            self.__draw_callout(callout)
-
-        for polygon in sorted(polygons, key=lambda x: x.index):
-            self.__draw_polygon(polygon)
-
-        for key, group in groupby(boxed_texts, lambda x: [x.type, x.xloc, x.yloc]):
-            group = list(sorted(group, key=lambda x: x.index))
-
-            if key[0] == Type.default:
+            if type_ == Type.default:
                 self.__draw_bottom(group)
+            elif type_ == Type.polygon:
+                for p in group:
+                    self.__draw_polygon(p)
+            elif type_ == Type.callout:
+                for c in group:
+                    self.__draw_callout(c)
             else:
                 self.__draw_side_group(key, group)
 
+        self.__highimage = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+        self.__high_draw = ImageDraw(self.__highimage, mode="RGBA")
         self._draw_bbox()
 
-        # width = self.__width / 2
-        # height = self.__height
-        # xy = [width - 1, 0, width - 1, height]
-        # self.__draw.line(xy, fill=(0, 0, 0), width=2)
+        images_count = len(self.__images)
+        if images_count > 0:
+            result = self.__images[0]
+            for i in range(1, images_count):
+                second = self.__images[i]
+                result = Image.alpha_composite(result, second)
 
-        result = Image.alpha_composite(self.__bgimage, self.__image)
         result.save(self.__filename)
 
         if len(self.__bbox):
@@ -326,16 +343,17 @@ class Page(object):
         """
         Draws east and west sides of the page
         """
-
         if len(group) == 0:
             return
 
         # noinspection PyShadowingBuiltins
-        type = key[0]
-        xloc = key[1]
-        yloc = key[2]
-
+        type = key.type
+        xloc = key.xloc
+        yloc = key.yloc
         width = self.__width
+
+        _, bgdraw = self.get_new_image()
+        _, draw = self.get_new_image()
 
         if xloc == XLocation.left:
             x = width * 0.05 if type == Type.west else width * 0.55
@@ -358,10 +376,10 @@ class Page(object):
             spacing = split.spacing
             font = split.font
 
-            self.__text_draw.set_keywords(t.keywords)
-            bbox = self.__text_draw.multiline_text((x, y), split.text, font=font,
-                                                   fill=t.fgcolor, align=align, outline=t.fgcolor)
-            self.__update_bbox_dict(self.__text_draw.bbox)
+            draw.set_keywords(t.keywords)
+            bbox = draw.multiline_text((x, y), split.text, font=font,
+                                       fill=t.fgcolor, align=align, outline=t.fgcolor)
+            self.__update_bbox_dict(draw.bbox)
 
             x_min = min(x_min, bbox[0])
             x_max = max(x_max, bbox[2])
@@ -370,7 +388,7 @@ class Page(object):
 
         bg = group[0].bgcolor
         if bg is not None:
-            self.__bgdraw.rectangle([x_min, y_min, x_max, y], fill=bg)
+            bgdraw.rectangle([x_min, y_min, x_max, y], fill=bg)
 
     def __split_text(self, box_width, t):
         """
@@ -383,10 +401,10 @@ class Page(object):
         style = self.__styles[t.style]
         line_height = style.line_height
         font = ImageFont.truetype(style.font_face, size=style.font_size)
-        symbol_height = self.__text_draw.textsize('A', font=font)[1]
+        symbol_height = self.__text_helper.textsize('A', font=font)[1]
         spacing = line_height - symbol_height
 
-        split = self.__text_draw.split_text_to_multiline(t.value, font, box_width, spacing)
+        split = self.__text_helper.split_text_to_multiline(t.value, font, box_width, spacing)
         split.symbol_height = symbol_height
         split.spacing = spacing
 
@@ -430,6 +448,9 @@ class Page(object):
         Draws the text at the bottom of page (texts with Type.default)
         """
 
+        _, bgdraw = self.get_new_image()
+        _, draw = self.get_new_image()
+
         y = self.__height
 
         for t in group:
@@ -446,16 +467,25 @@ class Page(object):
             symbol_size = splitted.symbol_height
             font = splitted.font
 
-            self.__text_draw.set_keywords(t.keywords)
-            self.__text_draw.multiline_text((margin, y), splitted.text,
-                                            fill=t.fgcolor, font=font, outline=t.fgcolor)
-            self.__update_bbox_dict(self.__text_draw.bbox)
+            draw.set_keywords(t.keywords)
+            draw.multiline_text((margin, y), splitted.text,
+                                fill=t.fgcolor, font=font, outline=t.fgcolor)
+            self.__update_bbox_dict(draw.bbox)
 
             y += splitted.size[1] + symbol_size
 
         bg = group[0].bgcolor
         if bg is not None:
-            self.__bgdraw.rectangle([0, y_min, self.__width, self.__height], fill=bg)
+            bgdraw.rectangle([0, y_min, self.__width, self.__height], fill=bg)
+
+    def get_new_image(self):
+        """
+        :rtype : tuple(Image, ImageDraw)
+        """
+        image = Image.new("RGBA", (self.__width, self.__height), (0, 0, 0, 0))
+        draw = ImageDraw2(image, mode="RGBA")
+        self.__images.append(image)
+        return image, draw
 
     def __update_bbox_dict(self, bbox_dict):
         """
@@ -488,8 +518,11 @@ class Page(object):
         """
         points = t.points
 
+        _, bgdraw = self.get_new_image()
+        _, text_draw = self.get_new_image()
+
         # Draw polygon
-        self.__bgdraw.polygon(points, fill=t.bgcolor, outline=t.bocolor)
+        bgdraw.polygon(points, fill=t.bgcolor, outline=t.bocolor)
 
         text_center_x, text_center_y = centroid(points)
         box_width = get_polygon_width(points)
@@ -499,10 +532,10 @@ class Page(object):
         split = self.__split_text(box_width, t)
         font = split.font
 
-        self.__text_draw.set_keywords(t.keywords)
-        self.__text_draw.multiline_text(center, split.text, font=font,
-                                        fill=t.fgcolor, align="center", outline=t.fgcolor)
-        self.__update_bbox_dict(self.__text_draw.bbox)
+        text_draw.set_keywords(t.keywords)
+        text_draw.multiline_text(center, split.text, font=font,
+                                 fill=t.fgcolor, align="center", outline=t.fgcolor)
+        self.__update_bbox_dict(text_draw.bbox)
 
     def __draw_callout(self, t):
         """
@@ -513,9 +546,12 @@ class Page(object):
 
         all_points = t.points
 
+        _, bgdraw = self.get_new_image()
+        _, text_draw = self.get_new_image()
+
         # Draw polygon
         smoothed = smooth_points(all_points, self.__callout_smooth_factor, self.__callout_pointer_angle)
-        self.__bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
+        bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
 
         # remove callout angle from polygon to recognize callout center
         points_no_callout_center = self.__get_points_without_callout_angle_center(all_points)
@@ -527,10 +563,10 @@ class Page(object):
         split = self.__split_text(box_width, t)
         font = split.font
 
-        self.__text_draw.set_keywords(t.keywords)
-        self.__text_draw.multiline_text(center, split.text, font=font,
-                                        fill=t.fgcolor, align="center", outline=t.fgcolor)
-        self.__update_bbox_dict(self.__text_draw.bbox)
+        text_draw.set_keywords(t.keywords)
+        text_draw.multiline_text(center, split.text, font=font,
+                                 fill=t.fgcolor, align="center", outline=t.fgcolor)
+        self.__update_bbox_dict(text_draw.bbox)
 
     @staticmethod
     def __get_points_without_callout_angle_center(all_points):
