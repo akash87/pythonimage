@@ -28,7 +28,7 @@ def get_angle(p1, p2, p3):
 
 
 def convert_to_degree(radian):
-    return radian * 180 / math.pi
+    return math.degrees(radian)
 
 
 def point_distance(a, b):

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
-from functools import cmp_to_key
 
 import os
 from enum import Enum
@@ -8,7 +7,7 @@ from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw, ImageColor
 import math
 import sys
-from bezier import smooth_points, convert_to_degree, get_angle, point_distance
+from bezier import smooth_points, convert_to_degree, get_angle
 import textwrap2
 
 
@@ -47,6 +46,30 @@ def get_symbol_size(font):
     :return:
     """
     return font.getsize('A')
+
+
+def centroid_for_polygon(points):
+    imax = len(points)
+
+    result_x = 0
+    result_y = 0
+    area = 0.
+
+    for i in range(0, imax):
+        k = (i + 1) % imax
+
+        tmp = (points[i][0] * points[k][1]) - (points[k][0] * points[i][1])
+        area += tmp
+
+        result_x += (points[i][0] + points[k][0]) * tmp
+        result_y += (points[i][1] + points[k][1]) * tmp
+
+    area *= 0.5
+
+    result_x *= 1.0 / (area * 6.0)
+    result_y *= 1.0 / (area * 6.0)
+
+    return [result_x, result_y]
 
 
 def centroid(points):
@@ -139,6 +162,8 @@ class Text(object):
                  points=None,
                  fgcolor=None,
                  bgcolor=None,
+                 bocolor=None,
+                 bowidth=2,
                  bgopacity=0.3):
         """
         :type index: int
@@ -160,8 +185,8 @@ class Text(object):
         self.__style = style
         self.__xloc = xloc
         self.__yloc = yloc
-        self.__boWidth = 2
-        self.__boColor = (0, 0, 0)
+        self.__boWidth = bowidth
+        self.__boColor = bocolor
         self.__fgcolor = fgcolor or (255, 255, 255)
         self.__points = points
 
@@ -540,22 +565,23 @@ class Page(object):
 
         :type t: Text
         """
-        points = t.points
+        all_points = t.points
 
         _, bgdraw = self.get_new_image()
         _, text_draw = self.get_new_image()
 
         # Draw polygon
-        bgdraw.polygon(points, fill=t.bgcolor, outline=t.bocolor)
+        bgdraw.polygon(all_points, fill=t.bgcolor, outline=t.bocolor)
 
-        text_center_x, text_center_y = centroid(points)
-        box_width = get_polygon_width(points)
-        text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
-        center = [text_center_x, text_center_y]
+        # remove callout angle from polygon to recognize callout center
+        points_no_callout_center = self.__get_points_without_small_angle(all_points)
+        text_center_x, text_center_y = centroid_for_polygon(points_no_callout_center)
 
-        points_n = self.__get_points_without_small_angle(points)
-        split = self.__split_text_polygon(points_n, t)
+        split = self.__split_text_polygon(points_no_callout_center, t)
         font = split.font
+        y_start = split.y_start
+
+        center = [text_center_x, y_start]
 
         text_draw.set_keywords(t.keywords)
         text_draw.multiline_text(center, split.text, font=font,
@@ -580,13 +606,13 @@ class Page(object):
 
         # remove callout angle from polygon to recognize callout center
         points_no_callout_center = self.__get_points_without_small_angle(all_points)
-        text_center_x, text_center_y = centroid(points_no_callout_center)
-        box_width = get_polygon_width(points_no_callout_center)
-        text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
-        center = [text_center_x, text_center_y]
+        text_center_x, text_center_y = centroid_for_polygon(points_no_callout_center)
 
-        split = self.__split_text(box_width, t)
+        split = self.__split_text_polygon(points_no_callout_center, t)
         font = split.font
+        y_start = split.y_start
+
+        center = [text_center_x, y_start]
 
         text_draw.set_keywords(t.keywords)
         text_draw.multiline_text(center, split.text, font=font,
@@ -618,7 +644,7 @@ class Page(object):
 
 
 class SplitResult(object):
-    def __init__(self, text, size, font):
+    def __init__(self, text, size, font, y_start=0):
         """
         :type text: str
         :type size: tuple|list
@@ -629,6 +655,7 @@ class SplitResult(object):
         self.symbol_height = 10 if font is None else font.size
         self.font = font
         self.spacing = 2
+        self.y_start = y_start
 
     def __str__(self):
         return str.format("Size={0} Text={1}", self.size, self.text)
@@ -647,7 +674,7 @@ class StyleInfo(object):
     def __init__(self, font_size, line_height):
         self.font_size = font_size
         self.line_height = line_height
-        self.font_face = "arial.ttf"
+        self.font_face = "arialbd.ttf"
 
     def __str__(self):
         return str.format("FS={0} LH={1} FW={2}", self.font_size, self.line_height)
@@ -825,9 +852,12 @@ class ImageDraw2(ImageDraw):
         line_spacing = self.textsize('A', font=font)[1] + spacing
         tries = 1
         x_center, y_center = center
-        y_start = y_center - int(line_spacing / 2)
+        ydiff = int(line_spacing / 2)
+        y_start = y_center - ydiff
         fitted = []
         result_text = None
+
+        min_y = min(points, key=lambda x: x[1])[1]
 
         while y_start > 0:
             fitted.clear()
@@ -841,10 +871,12 @@ class ImageDraw2(ImageDraw):
                 cur_text = "\n".join(lines[1:])
                 cur_y += line_spacing
                 cur_width = get_width((x_center, cur_y))
+                if not cur_text:
+                    break
 
             y_next = cur_y + line_spacing
             next_width = get_width((x_center, y_next))
-            lines = textwrap2.wrap(font, next_width, cur_text)
+            lines = textwrap2.wrap(font, next_width, cur_text, max_lines=2, keep_excess=True)
 
             if len(lines) == 0:
                 result_text = "\n".join(fitted)
@@ -855,7 +887,8 @@ class ImageDraw2(ImageDraw):
                 break
             else:
                 tries += 1
-                y_start -= int(line_spacing / 2)
+                if y_start - ydiff >= min_y:
+                    y_start -= ydiff
 
         result_text = result_text if result_text is not None else "\n".join(fitted)
-        return SplitResult(result_text, (0, 0), font)
+        return SplitResult(result_text, (0, 0), font, y_start=y_start)
