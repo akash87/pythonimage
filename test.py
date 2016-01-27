@@ -62,6 +62,91 @@ class TestCreateLine(TestCase):
         self.assertEqual(expected, result2)
 
 
+def __test2():
+    polygon_page = Page(0, 1024, 576)
+    t4 = Text(3,
+              "1\n 2 3\n 4 5 6 7 6 5 4 3 2 1 2 3 4 5 6 7 8 9 0 9 8 7 8 9 7 6 5 5 4 3 2 2 3 4 2 3 2 13 3 4"
+              "  6 6 7 7 5 43 3 2 2  3 4 45 5  6 77 8 99 77 5 45", [],
+              Type.polygon, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0000", bgopacity=0.5,
+              points=[(299, 345),
+                      (248, 379),
+                      (231, 409),
+                      (220, 454),
+                      (221, 518),
+                      (243, 550),
+                      (286, 562),
+                      (358, 569),
+                      (432, 570),
+                      (491, 567),
+                      (500, 543),
+                      (505, 500),
+                      (506, 450),
+                      (502, 418),
+                      (462, 397),
+                      (412, 379),
+                      (353, 366),
+                      (332, 353),
+                      (353, 310),
+                      (305, 338)])
+
+    t5 = Text(4,
+              "A hamster does not need many supplies. Every hamster needs shelter, water and food. A hamster should "
+              "have a large cage that it cannot escape from. The cage needs some sort of soft bedding, such as wood "
+              "shavings. You should get a water bottle and food bowl to put in the cage.", [],
+              Type.polygon, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
+              points=[(578, 55),
+                      (540, 115),
+                      (400, 155),
+                      (554, 172),
+                      (600, 217),
+                      (667, 232),
+                      (745, 223),
+                      (794, 197),
+                      (823, 146),
+                      (817, 87),
+                      (774, 44),
+                      (714, 22),
+                      (635, 23)])
+
+    polygon_page.generateTextImage([t4, t5], 'test1.png')
+
+    t4 = Text(3,
+              "1\n 2 3\n 4 5 6 7 6 5 4 3 2 1 2 3 4 5 6 7 8 9 0 9 8 7 8 9 7 6 5 5 4 3 2 2 3 4 2 3 2 13 3 4"
+              "  6 6 7 7 5 43 3 2 2  3 4 45 5  6 77 8 99 77 5 45", [],
+              Type.polygon, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0000", bgopacity=0.5,
+              points=[(142, 113),
+                      (282, 39),
+                      (424, 135),
+                      (390, 201),
+                      (500, 300),
+                      (332, 221),
+                      (128, 273),
+                      (132, 173),
+                      (142, 113)
+                      ])
+
+    t5 = Text(4,
+              "A hamster does not need many supplies. Every hamster needs shelter, water and food. A hamster should "
+              "have a large cage that it cannot escape from. The cage needs some sort of soft bedding, such as wood "
+              "shavings. You should get a water bottle and food bowl to put in the cage.", [],
+              Type.callout, Style.normal, fgcolor="#FFFFFF", bgcolor="#FF0FF0", bgopacity=0.5,
+              points=[(578, 55),
+                      (540, 115),
+                      (400, 155),
+                      (554, 172),
+                      (600, 217),
+                      (667, 232),
+                      (745, 223),
+                      (794, 197),
+                      (823, 146),
+                      (817, 87),
+                      (774, 44),
+                      (714, 22),
+                      (635, 23)])
+
+    polygon_page.generateTextImage([t4, t5], 'test2.png')
+
+
 def __test():
     test_page = Page(0, 1024, 576)
     style = Style.normal
@@ -352,5 +437,5 @@ def __test():
 
 
 if __name__ == '__main__':
-    __test()
+    __test2()
 # unittest.main()

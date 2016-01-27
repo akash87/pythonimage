@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
+from functools import cmp_to_key
 
 import os
 from enum import Enum
@@ -7,7 +8,7 @@ from PIL import ImageFont, Image
 from PIL.ImageDraw import ImageDraw, ImageColor
 import math
 import sys
-from bezier import smooth_points, convert_to_degree, get_angle
+from bezier import smooth_points, convert_to_degree, get_angle, point_distance
 import textwrap2
 
 
@@ -53,7 +54,7 @@ def centroid(points):
     Calculates the center point of callout points
 
     :param points:
-    :return:
+    :rtype: tuple(int)
     """
     center = [0, 0]
     points_count = len(points)
@@ -68,8 +69,8 @@ def centroid(points):
         center[0] += point[0]
         center[1] += point[1]
 
-    center[0] /= points_count
-    center[1] /= points_count
+    center[0] = int(center[0] / points_count)
+    center[1] = int(center[1] / points_count)
 
     return center
 
@@ -409,6 +410,26 @@ class Page(object):
 
         return split
 
+    def __split_text_polygon(self, points, t):
+        """
+        Splits text if text width will be wider than box_width.
+        Also, calculates space required, spacings and etc.
+
+        :type points: list
+        :type t: Text
+        """
+        style = self.__styles[t.style]
+        line_height = style.line_height
+        font = ImageFont.truetype(style.font_face, size=style.font_size)
+        symbol_height = self.__text_helper.textsize('A', font=font)[1]
+        spacing = line_height - symbol_height
+
+        split = self.__text_helper.split_text_in_polygon(t.value, font, points, spacing)
+        split.symbol_height = symbol_height
+        split.spacing = spacing
+
+        return split
+
     def __calc_y_top(self, yloc, group):
         """
         Calculates minimum Y for group
@@ -532,7 +553,8 @@ class Page(object):
         text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
         center = [text_center_x, text_center_y]
 
-        split = self.__split_text(box_width, t)
+        points_n = self.__get_points_without_small_angle(points)
+        split = self.__split_text_polygon(points_n, t)
         font = split.font
 
         text_draw.set_keywords(t.keywords)
@@ -557,7 +579,7 @@ class Page(object):
         bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
 
         # remove callout angle from polygon to recognize callout center
-        points_no_callout_center = self.__get_points_without_callout_angle_center(all_points)
+        points_no_callout_center = self.__get_points_without_small_angle(all_points)
         text_center_x, text_center_y = centroid(points_no_callout_center)
         box_width = get_polygon_width(points_no_callout_center)
         text_center_y = self.__calc_y_top_from_start_y([t], box_width, text_center_y, YLocation.center)
@@ -571,8 +593,7 @@ class Page(object):
                                  fill=t.fgcolor, align="center", outline=t.fgcolor)
         self.__update_bbox_dict(text_draw.bbox)
 
-    @staticmethod
-    def __get_points_without_callout_angle_center(all_points):
+    def __get_points_without_small_angle(self, all_points):
         points_count = len(all_points)
 
         points_no_callout_center = all_points[:]
@@ -581,7 +602,7 @@ class Page(object):
             p1 = all_points[(i + 1) % points_count]
             p3 = all_points[(i + 2) % points_count]
             angle = convert_to_degree(get_angle(p1, p2, p3))
-            if angle <= 45:
+            if angle <= self.__callout_pointer_angle:
                 del points_no_callout_center[(i + 1) % points_count]
                 break
         return points_no_callout_center
@@ -598,6 +619,11 @@ class Page(object):
 
 class SplitResult(object):
     def __init__(self, text, size, font):
+        """
+        :type text: str
+        :type size: tuple|list
+        :type font: font
+        """
         self.text = text
         self.size = size
         self.symbol_height = 10 if font is None else font.size
@@ -749,10 +775,87 @@ class ImageDraw2(ImageDraw):
             w = textwrap2.TextWrapper(font, width=width)
             line = w.fill(line)
             w, h = self.multiline_textsize(line, font, spacing)
-            total_width += w
+            total_width = max(w, total_width)
             total_height += h
             lines.append(line)
 
         result_text = "\n".join(lines)
         result_size = (total_width, total_height)
         return SplitResult(result_text, result_size, font)
+
+    def split_text_in_polygon(self, text, font, points, spacing):
+
+        def y_distance(p1, p2):
+            return math.fabs(p1[1] - p2[1])
+
+        def get_width(point):
+            p_x = point[0]
+            left_points = sorted(filter(lambda x: x[0] <= p_x, points), key=lambda x: y_distance(point, x))[:2]
+            right_points = sorted(filter(lambda x: x[0] > p_x, points), key=lambda x: y_distance(point, x))[:2]
+
+            if len(left_points) == 0:
+                left_point = point
+            elif len(right_points) == 1:
+                left_point = left_points[0]
+            else:
+                if left_points[0][0] > left_points[1][0]:
+                    left_point = left_points[0]
+                else:
+                    left_point = left_points[1]
+
+            if len(right_points) == 0:
+                right_point = point
+            elif len(right_points) == 1:
+                right_point = right_points[0]
+            else:
+                if right_points[0][0] < right_points[1][0]:
+                    right_point = right_points[0]
+                else:
+                    right_point = right_points[1]
+
+            return math.fabs(right_point[0] - left_point[0])
+
+        center = centroid(points)
+        width = get_width(center)
+
+        size = self.textsize(text, font)
+        if size[0] < width:
+            return SplitResult(text, size, font)
+
+        line_spacing = self.textsize('A', font=font)[1] + spacing
+        tries = 1
+        x_center, y_center = center
+        y_start = y_center - int(line_spacing / 2)
+        fitted = []
+        result_text = None
+
+        while y_start > 0:
+            fitted.clear()
+            cur_text = text
+            cur_y = y_start
+            cur_width = get_width((x_center, y_start))
+
+            for i in range(tries):
+                lines = textwrap2.wrap(font, cur_width, cur_text, max_lines=1, keep_excess=True)
+                fitted.append(lines[0])
+                cur_text = "\n".join(lines[1:])
+                cur_y += line_spacing
+                cur_width = get_width((x_center, cur_y))
+
+            y_next = cur_y + line_spacing
+            next_width = get_width((x_center, y_next))
+            lines = textwrap2.wrap(font, next_width, cur_text)
+
+            if len(lines) == 0:
+                result_text = "\n".join(fitted)
+                break
+            elif len(lines) == 1:
+                fitted.append(lines[0])
+                result_text = "\n".join(fitted)
+                break
+            else:
+                tries += 1
+                y_start -= int(line_spacing / 2)
+
+        result_text = result_text if result_text is not None else "\n".join(fitted)
+        return SplitResult(result_text, (0, 0), font)

@@ -128,6 +128,7 @@ class TextWrapper:
                  tabsize=8,
                  *,
                  max_lines=None,
+                 keep_excess=False,
                  placeholder=' [...]'):
         self.font = font
         self.width = width
@@ -142,6 +143,7 @@ class TextWrapper:
         self.tabsize = tabsize
         self.max_lines = max_lines
         self.placeholder = placeholder
+        self.keep_excess= keep_excess
 
     # -- Private methods -----------------------------------------------
     # (possibly useful for subclasses to override)
@@ -317,23 +319,30 @@ class TextWrapper:
                     # list of all lines (return value).
                     lines.append(indent + ''.join(cur_line))
                 else:
-                    while cur_line:
-                        if (cur_line[-1].strip() and
-                                        cur_len + len(self.placeholder) <= width):
-                            cur_line.append(self.placeholder)
-                            lines.append(indent + ''.join(cur_line))
-                            break
-                        cur_len -= get_width(cur_line[-1])
-                        del cur_line[-1]
+                    if self.keep_excess:
+                        lines.append(indent + ''.join(cur_line))
+                        cur_line = []
+                        while chunks:
+                            cur_line.append(chunks.pop())
+                        lines.append(''.join(cur_line))
                     else:
-                        if lines:
-                            prev_line = lines[-1].rstrip()
-                            if (get_width(prev_line) + get_width(self.placeholder) <=
-                                    self.width):
-                                lines[-1] = prev_line + self.placeholder
+                        while cur_line:
+                            if (cur_line[-1].strip() and
+                                            cur_len + len(self.placeholder) <= width):
+                                cur_line.append(self.placeholder)
+                                lines.append(indent + ''.join(cur_line))
                                 break
-                        lines.append(indent + self.placeholder.lstrip())
-                    break
+                            cur_len -= get_width(cur_line[-1])
+                            del cur_line[-1]
+                        else:
+                            if lines:
+                                prev_line = lines[-1].rstrip()
+                                if (get_width(prev_line) + get_width(self.placeholder) <=
+                                        self.width):
+                                    lines[-1] = prev_line + self.placeholder
+                                    break
+                            lines.append(indent + self.placeholder.lstrip())
+                        break
 
         return lines
 
@@ -368,3 +377,45 @@ class TextWrapper:
         containing the entire wrapped paragraph.
         """
         return "\n".join(self.wrap(text))
+
+
+def wrap(font, width, text, **kwargs):
+    """
+    :type text: str
+    :rtype: list[str]
+    """
+
+    wrapper = TextWrapper(font, width, **kwargs)
+
+    if "\n" in text:
+        chunks = []
+
+        max_lines = kwargs.get('max_lines', None)
+        splitted = text.splitlines()
+        extend = None
+
+        if max_lines is not None:
+            extend = splitted[max_lines:]
+            splitted = splitted[:max_lines]
+
+        for line in splitted:
+            chunks.extend(wrapper.wrap(line))
+            if max_lines is not None and (len(chunks)) > max_lines:
+                break
+
+        if extend is not None:
+            chunks.extend(extend)
+
+        return chunks
+
+    return wrapper.wrap(text)
+
+
+def fill(font, width, text, **kwargs):
+    """
+    :type text: str
+    :rtype: list[str]
+    """
+
+    wrapper = TextWrapper(font, width, **kwargs)
+    return wrapper.fill(text)
