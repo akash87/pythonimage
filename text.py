@@ -494,7 +494,7 @@ class Page(object):
 
         def split(f_size, l_height):
             polygon_texts = []
-            y_traverse = y_min + l_height
+            y_traverse = y_min + l_height * 1.5
 
             while y_traverse + l_height < y_max:
                 pt = get_polygon_width(points, y_traverse, y_traverse + l_height)
