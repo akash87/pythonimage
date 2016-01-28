@@ -742,7 +742,7 @@ def get_word(line):
     letters = []
 
     for b in line:
-        if str.isspace(b):
+        if str.isspace(b) or b in '.,;$!@#$%^&*()"\'-+_–—№?<>/\\|`~':
             break
         letters.append(b)
 
