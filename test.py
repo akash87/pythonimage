@@ -177,7 +177,6 @@ def __test():
     test_page.generateTextImage([t1], '5.png')
 
     polygon_page = Page(0, 1024, 576)
-    polygon_page.set_font_style(Style.normal, 16, 20)
 
     t1 = Text(0,
               "BOTTOM\nLEFT WEST\nWorld champion Viswanathan Anand started his title defence in style, holding off"
@@ -236,7 +235,6 @@ def __test():
                       (714, 22),
                       (635, 23)])
 
-    polygon_page.set_font_style(Style.normal, 13, 18)
     polygon_page.generateTextImage([t1, t2, t3, t4, t5], 'test1.png')
 
     t4 = Text(3,
@@ -273,8 +271,6 @@ def __test():
                       (714, 22),
                       (635, 23)])
 
-    polygon_page.set_font_style(Style.h3, 18, 24)
-    polygon_page.set_font_style(Style.normal, 13, 18)
     polygon_page.generateTextImage([t4, t5], 'test2.png')
 
     t1 = Text(0,

@@ -38,16 +38,6 @@ class YLocation(Enum):
     bottom = 'bottom'
 
 
-def get_symbol_size(font):
-    """
-    Gets width and height for "A" symbol
-
-    :param font:
-    :return:
-    """
-    return font.getsize('A')
-
-
 def centroid_for_polygon(points):
     imax = len(points)
 
@@ -98,21 +88,68 @@ def centroid(points):
     return center
 
 
-def get_polygon_width(points):
+def get_font_copy(font, font_size):
+    font_family = font.font.family
+    font_family = font_family.lower()
+    return ImageFont.truetype(font_family + ".ttf", font_size)
+
+
+class PolygonText:
+    def __init__(self, x_start, y_top, text_width):
+        self.x_start = x_start
+        self.y_top = y_top
+        self.text_width = text_width
+
+
+def get_polygon_width(points, y_top, y_bottom):
     """
-    Get the available width of callout to place text
+    Get the available width of polygon to place text
 
     :param points: callout points
     :return:
     """
-    min_x = sys.maxsize
-    max_x = 0
+    x_start_top = 0
+    x_end_top = 0
+    x_start_bottom = 0
+    x_end_bottom = 0
 
-    for point in points:
-        min_x = min(min_x, point[0])
-        max_x = max(max_x, point[1])
+    points_count = len(points)
 
-    return int(math.floor(math.fabs(max_x - min_x)) * 0.8)
+    for i in range(points_count - 1):
+        cur_point = points[i]
+        next_point = points[i + 1]
+
+        cur_x = cur_point[0]
+        cur_y = cur_point[1]
+
+        next_x = next_point[0]
+        next_y = next_point[1]
+
+        if cur_y <= y_top <= next_y:
+            x_start_top = (((next_x - cur_x) * (y_top - cur_y)) /
+                           (next_y - cur_y)) + cur_x
+
+        if cur_y <= y_bottom <= next_y:
+            x_start_bottom = (((next_x - cur_x) * (y_bottom - cur_y)) /
+                              (next_y - cur_y)) + cur_x
+
+        if cur_y >= y_top >= next_y:
+            x_end_top = (((next_x - cur_x) * (y_top - cur_y)) /
+                         (next_y - cur_y)) + cur_x
+
+        if cur_y >= y_bottom >= next_y:
+            x_end_bottom = (((next_x - cur_x) * (y_bottom - cur_y)) /
+                            (next_y - cur_y)) + cur_x
+
+    if x_start_top < x_end_top:
+        xstart = x_start_bottom if x_start_top < x_start_bottom else x_start_top
+        xend = x_end_top if x_end_top < x_end_bottom else x_end_bottom
+    else:
+        xend = x_start_top if x_start_top < x_start_bottom else x_start_bottom
+        xstart = x_end_bottom if x_end_top < x_end_bottom else x_end_top
+
+    text_width = xend - xstart
+    return PolygonText(xstart, y_top, text_width)
 
 
 def get_color(color):
@@ -342,7 +379,7 @@ class Page(object):
                     self.__draw_polygon(p)
             elif type_ == Type.callout:
                 for c in group:
-                    self.__draw_callout(c)
+                    self.__draw_polygon(c)
             else:
                 self.__draw_side_group(key, group)
 
@@ -440,20 +477,46 @@ class Page(object):
         Splits text if text width will be wider than box_width.
         Also, calculates space required, spacings and etc.
 
+
         :type points: list
         :type t: Text
+        :rtype : PolygonTextSplitResult
         """
+
+        y_min = sys.maxsize
+        y_max = 0
+
+        for i, point in enumerate(points):
+            y_min = min(y_min, point[1])
+            y_max = max(y_max, point[1])
+
         style = self.__styles[t.style]
-        line_height = style.line_height
-        font = ImageFont.truetype(style.font_face, size=style.font_size)
-        symbol_height = self.__text_helper.textsize('A', font=font)[1]
-        spacing = line_height - symbol_height
 
-        split = self.__text_helper.split_text_in_polygon(t.value, font, points, spacing)
-        split.symbol_height = symbol_height
-        split.spacing = spacing
+        def split(f_size, l_height):
+            polygon_texts = []
+            y_traverse = y_min + l_height
 
-        return split
+            while y_traverse + l_height < y_max:
+                pt = get_polygon_width(points, y_traverse, y_traverse + l_height)
+                polygon_texts.append(pt)
+                y_traverse += l_height
+
+            font = ImageFont.truetype(style.font_face, size=f_size)
+            symbol_height = self.__text_helper.textsize('A', font=font)[1]
+            spacing = l_height - symbol_height
+
+            try:
+                result = self.__text_helper.split_text_in_polygon2(t.value, font, points, spacing, polygon_texts)
+                result.symbol_height = symbol_height
+                result.spacing = spacing
+                result.y_start = y_min
+                result.polygon_texts = polygon_texts
+            except OutOfBoundsException:
+                return split(f_size - 1, l_height - 1)
+
+            return result
+
+        return split(style.font_size, style.line_height)
 
     def __calc_y_top(self, yloc, group):
         """
@@ -571,55 +634,24 @@ class Page(object):
         _, text_draw = self.get_new_image()
 
         # Draw polygon
-        bgdraw.polygon(all_points, fill=t.bgcolor, outline=t.bocolor)
+        if t.type == Type.callout:
+            smoothed = smooth_points(all_points, self.__callout_smooth_factor, self.__callout_pointer_angle)
+            bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
+        else:
+            bgdraw.polygon(all_points, fill=t.bgcolor, outline=t.bocolor)
 
-        # remove callout angle from polygon to recognize callout center
-        points_no_callout_center = self.__get_points_without_small_angle(all_points)
-        text_center_x, text_center_y = centroid_for_polygon(points_no_callout_center)
+        # remove pointer angle from polygon to recognize callout center
+        points_no_pointer_angle = self.__get_points_without_pointer_angle(all_points)
 
-        split = self.__split_text_polygon(points_no_callout_center, t)
+        split = self.__split_text_polygon(points_no_pointer_angle, t)
         font = split.font
-        y_start = split.y_start
-
-        center = [text_center_x, y_start]
 
         text_draw.set_keywords(t.keywords)
-        text_draw.multiline_text(center, split.text, font=font,
-                                 fill=t.fgcolor, align="center", outline=t.fgcolor)
+        text_draw.polygon_text(split.text, split.polygon_texts, font,
+                               fill=t.fgcolor, outline=t.fgcolor)
         self.__update_bbox_dict(text_draw.bbox)
 
-    def __draw_callout(self, t):
-        """
-        Draws callout using Text.points
-
-        :type t: Text
-        """
-
-        all_points = t.points
-
-        _, bgdraw = self.get_new_image()
-        _, text_draw = self.get_new_image()
-
-        # Draw polygon
-        smoothed = smooth_points(all_points, self.__callout_smooth_factor, self.__callout_pointer_angle)
-        bgdraw.polygon(smoothed, fill=t.bgcolor, outline=t.bocolor)
-
-        # remove callout angle from polygon to recognize callout center
-        points_no_callout_center = self.__get_points_without_small_angle(all_points)
-        text_center_x, text_center_y = centroid_for_polygon(points_no_callout_center)
-
-        split = self.__split_text_polygon(points_no_callout_center, t)
-        font = split.font
-        y_start = split.y_start
-
-        center = [text_center_x, y_start]
-
-        text_draw.set_keywords(t.keywords)
-        text_draw.multiline_text(center, split.text, font=font,
-                                 fill=t.fgcolor, align="center", outline=t.fgcolor)
-        self.__update_bbox_dict(text_draw.bbox)
-
-    def __get_points_without_small_angle(self, all_points):
+    def __get_points_without_pointer_angle(self, all_points):
         points_count = len(all_points)
 
         points_no_callout_center = all_points[:]
@@ -628,9 +660,11 @@ class Page(object):
             p1 = all_points[(i + 1) % points_count]
             p3 = all_points[(i + 2) % points_count]
             angle = convert_to_degree(get_angle(p1, p2, p3))
+
             if angle <= self.__callout_pointer_angle:
                 del points_no_callout_center[(i + 1) % points_count]
                 break
+
         return points_no_callout_center
 
     def _draw_bbox(self):
@@ -643,7 +677,7 @@ class Page(object):
                 self.__high_draw.rectangle(box.box, outline=box.outline)
 
 
-class SplitResult(object):
+class SplitTextResult(object):
     def __init__(self, text, size, font, y_start=0):
         """
         :type text: str
@@ -656,6 +690,25 @@ class SplitResult(object):
         self.font = font
         self.spacing = 2
         self.y_start = y_start
+
+    def __str__(self):
+        return str.format("Size={0} Text={1}", self.size, self.text)
+
+
+class PolygonTextSplitResult(object):
+    def __init__(self, text, size, font):
+        """
+        :type text: list[str]
+        :type size: tuple|list
+        :type font: font
+        """
+        self.text = text
+        self.size = size
+        self.symbol_height = 10 if font is None else font.size
+        self.font = font
+        self.spacing = 2
+        self.y_start = 0
+        self.polygon_texts = []
 
     def __str__(self):
         return str.format("Size={0} Text={1}", self.size, self.text)
@@ -711,6 +764,24 @@ class ImageDraw2(ImageDraw):
     @property
     def bbox(self):
         return self.__bbox
+
+    def polygon_text(self, text_lines, polygon_texts, font,
+                     fill=None, outline=None, spacing=4):
+        """
+        :type polygon_texts: list[PolygonText]
+        """
+        line_spacing = self.textsize('A', font=font)[1] + spacing
+
+        for i, line in enumerate(text_lines):
+            pt = polygon_texts[i]
+            left = pt.x_start
+            top = pt.y_top
+            real_width = self.textsize(line, font=font)[0]
+            available_width = pt.text_width
+            left += int((available_width - real_width) / 2)
+
+            self.text((left, top), line, fill, font, None)
+            self.__find_bounding_boxes(font, left, line, line_spacing, outline, top)
 
     def multiline_text(self, xy, text, fill=None, font=None, anchor=None, outline=None,
                        spacing=4, align="left"):
@@ -792,7 +863,7 @@ class ImageDraw2(ImageDraw):
         """
         size = self.textsize(text, font)
         if size[0] < width:
-            return SplitResult(text, size, font)
+            return SplitTextResult(text, size, font)
 
         total_width = 0
         total_height = 0
@@ -808,87 +879,44 @@ class ImageDraw2(ImageDraw):
 
         result_text = "\n".join(lines)
         result_size = (total_width, total_height)
-        return SplitResult(result_text, result_size, font)
+        return SplitTextResult(result_text, result_size, font)
 
-    def split_text_in_polygon(self, text, font, points, spacing):
+    def split_text_in_polygon2(self, text, font, points, spacing, polygon_widths):
+        """
+        :type text: str
+        :type font: font
+        :type points: list
+        :type spacing: int|float
+        :type polygon_widths: list[PolygonText]
+        :rtype: PolygonTextSplitResult
+        """
+        result_lines = []
+        if not text:
+            return ""
 
-        def y_distance(p1, p2):
-            return math.fabs(p1[1] - p2[1])
+        cur_text = text
+        for poly_width in polygon_widths:
+            if len(cur_text) == 0:
+                break
 
-        def get_width(point):
-            p_x = point[0]
-            left_points = sorted(filter(lambda x: x[0] <= p_x, points), key=lambda x: y_distance(point, x))[:2]
-            right_points = sorted(filter(lambda x: x[0] > p_x, points), key=lambda x: y_distance(point, x))[:2]
-
-            if len(left_points) == 0:
-                left_point = point
-            elif len(right_points) == 1:
-                left_point = left_points[0]
-            else:
-                if left_points[0][0] > left_points[1][0]:
-                    left_point = left_points[0]
-                else:
-                    left_point = left_points[1]
-
-            if len(right_points) == 0:
-                right_point = point
-            elif len(right_points) == 1:
-                right_point = right_points[0]
-            else:
-                if right_points[0][0] < right_points[1][0]:
-                    right_point = right_points[0]
-                else:
-                    right_point = right_points[1]
-
-            return math.fabs(right_point[0] - left_point[0])
-
-        center = centroid(points)
-        width = get_width(center)
-
-        size = self.textsize(text, font)
-        if size[0] < width:
-            return SplitResult(text, size, font)
-
-        line_spacing = self.textsize('A', font=font)[1] + spacing
-        tries = 1
-        x_center, y_center = center
-        ydiff = int(line_spacing / 2)
-        y_start = y_center - ydiff
-        fitted = []
-        result_text = None
-
-        min_y = min(points, key=lambda x: x[1])[1]
-
-        while y_start > 0:
-            fitted.clear()
-            cur_text = text
-            cur_y = y_start
-            cur_width = get_width((x_center, y_start))
-
-            for i in range(tries):
-                lines = textwrap2.wrap(font, cur_width, cur_text, max_lines=1, keep_excess=True)
-                fitted.append(lines[0])
-                cur_text = "\n".join(lines[1:])
-                cur_y += line_spacing
-                cur_width = get_width((x_center, cur_y))
-                if not cur_text:
-                    break
-
-            y_next = cur_y + line_spacing
-            next_width = get_width((x_center, y_next))
-            lines = textwrap2.wrap(font, next_width, cur_text, max_lines=2, keep_excess=True)
+            lines = textwrap2.wrap(font, poly_width.text_width, cur_text, max_lines=1, keep_excess=True)
 
             if len(lines) == 0:
-                result_text = "\n".join(fitted)
+                cur_text = ""
                 break
             elif len(lines) == 1:
-                fitted.append(lines[0])
-                result_text = "\n".join(fitted)
+                cur_text = ""
+                result_lines.append(lines[0])
                 break
             else:
-                tries += 1
-                if y_start - ydiff >= min_y:
-                    y_start -= ydiff
+                result_lines.append(lines[0])
+                cur_text = "\n".join(lines[1:])
 
-        result_text = result_text if result_text is not None else "\n".join(fitted)
-        return SplitResult(result_text, (0, 0), font, y_start=y_start)
+        if len(cur_text):
+            raise OutOfBoundsException
+
+        return PolygonTextSplitResult(result_lines, (0, 0), font)
+
+
+class OutOfBoundsException(Exception):
+    pass
