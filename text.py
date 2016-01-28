@@ -778,7 +778,7 @@ class ImageDraw2(ImageDraw):
             top = pt.y_top
             real_width = self.textsize(line, font=font)[0]
             available_width = pt.text_width
-            left += int((available_width - real_width) / 2)
+            left += (max(0, available_width - real_width)) / 2
 
             self.text((left, top), line, fill, font, None)
             self.__find_bounding_boxes(font, left, line, line_spacing, outline, top)
